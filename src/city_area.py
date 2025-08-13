@@ -1,6 +1,10 @@
 from data.download.osm_area import create_osm_area_gdf
 from modules.area_processing import assign_group_categorie_to_area
 
+from utils.osm_config import configure
+configure()
+
+
 
 def main():
     """
