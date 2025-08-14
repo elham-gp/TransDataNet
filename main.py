@@ -39,8 +39,8 @@ area_gdf = gpd.read_file(area_filepath)
 pois_gdf = gpd.read_file(pois_filepath)
 census_gdf = gpd.read_file(census_filepath)
 
-#area_gdf = area_gdf.to_crs("EPSG:32188")
-#pois_gdf = pois_gdf.to_crs("EPSG:32188")
+area_gdf = area_gdf.to_crs("EPSG:32188")
+pois_gdf = pois_gdf.to_crs("EPSG:32188")
 print("Zensus loading done!")
 # filter street net to only use streets thar are longer than 100
 street_net_optimized_gdf = street_net_optimized_gdf[street_net_optimized_gdf["laenge [km]"] >= 0.1]
