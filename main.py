@@ -20,6 +20,15 @@ geo_packages = find_geo_packages()
 street_net_optimized_filepath = geo_packages["streets"]
 area_filepath = geo_packages["areas"]
 pois_filepath = geo_packages["pois"]
+
+# Check if file exists and is not empty
+if not os.path.exists(pois_filepath) or os.path.getsize(pois_filepath) == 0:
+    raise ValueError(f"GeoPackage file '{pois_filepath}' is missing or empty.")
+#print(f"POI GeoPackage File Path: {pois_filepath}")
+layers = gpd.read_file(pois_filepath, layer=None)
+print("Available Layers:", layers)
+print("File Size:", os.path.getsize(pois_filepath))
+
 nodes_filepath = geo_packages["nodes"]
 census_filepath = r"src\data\output\zensus_100x100.gpkg"
 
