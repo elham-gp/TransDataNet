@@ -47,3 +47,7 @@ def configure():
     ox.settings.overpass_timeout    = int(os.getenv("OVERPASS_TIMEOUT", "240"))
     ox.settings.overpass_memory     = int(os.getenv("OVERPASS_MEMORY",  str(2*1024*1024*1024)))
     ox.settings.max_query_area_size = float(os.getenv("OX_MAX_QUERY_AREA", "1e7"))
+
+
+
+    
