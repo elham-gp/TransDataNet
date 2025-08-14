@@ -28,9 +28,16 @@ MIRRORS = [
 ]
 MIRRORS = [m for m in MIRRORS if m]
 
+def _add_timeout_to_query(q: str) -> str:
+    q = q.strip()
+    # Add a global setting if the query doesn't already specify a timeout
+    if "[timeout:" not in q:
+        q = f"[timeout:{TIMEOUT}];" + q
+    return q
+
 def _query_overpass(*args):
     """
-    Supports both call styles:
+    Works with both call styles used in this repo:
       _query_overpass(query)
       _query_overpass(api_overpass, query)
     """
@@ -41,11 +48,17 @@ def _query_overpass(*args):
     else:
         raise TypeError("_query_overpass needs a query string")
 
+    query = _add_timeout_to_query(query)
     last_err = None
+
     for url in MIRRORS:
         print(f"[overpass] trying {url}")
-        api = overpy.Overpass(url=url, timeout=TIMEOUT, max_retry_count=0,
-                              headers={"User-Agent": UA})
+        # older overpy versions don't accept timeout/headers in ctor → don't pass them
+        try:
+            api = overpy.Overpass(url=url, max_retry_count=0)
+        except TypeError:
+            api = overpy.Overpass(url=url)
+
         for attempt in range(1, RETRIES + 1):
             try:
                 return api.query(query)
@@ -59,7 +72,10 @@ def _query_overpass(*args):
                 print(f"[overpass] error: {e} (attempt {attempt}/{RETRIES})")
                 time.sleep(3 * attempt)
         print("[overpass] switching mirror…")
+
+    # all mirrors failed
     raise last_err
+
 # ---- end helper ----
 
 
