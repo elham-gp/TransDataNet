@@ -1,3 +1,6 @@
+# add near the other imports (top of file)
+import os, time, overpy
+
 import logging
 
 import geopandas as gpd
@@ -12,9 +15,6 @@ from utils.save_data import save_gdf_as_gpkg
 
 from .osm_retry import fetch_osm_data
 from .queries.create_queries import osm_area_queries
-
-# add near the other imports (top of file)
-import os, time, overpy
 
 # ---- unified helper (paste this, replacing the old one) ----
 UA       = os.getenv("OX_USER_AGENT", "pedestrian_network (set OX_USER_AGENT)")

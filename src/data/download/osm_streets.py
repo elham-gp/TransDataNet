@@ -1,6 +1,7 @@
 """
 """
-
+# add near the other imports (top of file)
+import os, time, overpy
 import geopandas as gpd
 import overpy
 from shapely.geometry import LineString
@@ -11,8 +12,7 @@ from utils.helper import concatenate_geodataframes
 from utils.save_data import save_gdf_as_gpkg
 from .queries.create_queries import osm_street_queries
 
-# add near the other imports (top of file)
-import os, time, overpy
+
 
 # ---- unified helper (paste this, replacing the old one) ----
 UA       = os.getenv("OX_USER_AGENT", "pedestrian_network (set OX_USER_AGENT)")
