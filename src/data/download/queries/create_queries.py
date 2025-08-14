@@ -40,14 +40,21 @@ def list_of_poi_queries():
     """
     
     poi_queries = []
-
+    '''
     for keys in poi_key_value_dic.keys():
         osm_key = quote(poi_key_value_dic[keys]["Key"])
         osm_value = quote(poi_key_value_dic[keys]["value"])
         # for testing
 
+    '''
+
+    for key, value in poi_key_value_dic.items():
+        osm_key = quote(value["Key"])
+        osm_value = quote(value["value"])
+
         
         # Use a list comprehension to generate queries for each value of the key
+        '''
         queriy = f"""
             area["ISO3166-1"={country_code}][admin_level={admin_level_country}]->.country;
             area["{nameconvention}"="{city}"][admin_level={admin_level_city}]->.city;
@@ -55,6 +62,15 @@ def list_of_poi_queries():
             (._;>;);
             out body;
             """
+        '''
+        queriy = f"""
+            area["ISO3166-1"={country_code}][admin_level={admin_level_country}]->.country;
+            area["{nameconvention}"="{city}"][admin_level={admin_level_city}]->.city;
+            node["{osm_key}"="{osm_value}"](area.city)(area.country);
+            (._;>;);
+            out body;
+            """
+
         query_info = {"query":queriy,'key': osm_key, 'value': osm_value}    
 
         # Extend poi_queries with the generated queries
