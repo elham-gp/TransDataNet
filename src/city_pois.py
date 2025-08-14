@@ -2,8 +2,8 @@
 from data.download.osm_pois import create_osm_poi_gdf
 from modules.poi_processing import assign_group_categorie_poi
 
-#from utils.osm_config import configure
-#configure()
+from utils.osm_config import configure
+configure()
 
 
 def main():

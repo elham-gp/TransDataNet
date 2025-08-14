@@ -2,8 +2,8 @@
 from data.download.zensus import download_zensus_data
 from utils.helper import file_exists
 
-#from utils.osm_config import configure
-#configure()
+from utils.osm_config import configure
+configure()
 
 
 def main():
