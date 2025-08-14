@@ -11,14 +11,15 @@ from utils.helper import concatenate_geodataframes
 from utils.save_data import save_gdf_as_gpkg
 from .queries.create_queries import osm_street_queries
 
-# --- add near the imports ---
+# add near the other imports (top of file)
 import os, time, overpy
 
+# ---- unified helper (paste this, replacing the old one) ----
 UA       = os.getenv("OX_USER_AGENT", "pedestrian_network (set OX_USER_AGENT)")
 TIMEOUT  = int(os.getenv("OVERPASS_TIMEOUT", "240"))
 RETRIES  = int(os.getenv("OVERPASS_RETRIES", "3"))
 
-# overpy needs the /interpreter endpoint
+# overpy needs endpoints that end with /interpreter
 MIRRORS = [
     os.getenv("OVERPASS_URL"),  # e.g. https://overpass.kumi.systems/api/interpreter
     "https://overpass.kumi.systems/api/interpreter",
@@ -27,8 +28,19 @@ MIRRORS = [
 ]
 MIRRORS = [m for m in MIRRORS if m]
 
-# --- REPLACE your old _query_overpass with this ---
-def _query_overpass(api_overpass_unused, query: str):
+def _query_overpass(*args):
+    """
+    Supports both call styles:
+      _query_overpass(query)
+      _query_overpass(api_overpass, query)
+    """
+    if len(args) == 1:
+        query = args[0]
+    elif len(args) >= 2:
+        query = args[1]
+    else:
+        raise TypeError("_query_overpass needs a query string")
+
     last_err = None
     for url in MIRRORS:
         print(f"[overpass] trying {url}")
@@ -40,7 +52,7 @@ def _query_overpass(api_overpass_unused, query: str):
             except (overpy.exception.OverpassTooManyRequests,
                     overpy.exception.OverpassGatewayTimeout) as e:
                 last_err = e
-                print(f"[overpass] {e.__class__.__name__} (attempt {attempt}/{RETRIES}) … backing off")
+                print(f"[overpass] {e.__class__.__name__} (attempt {attempt}/{RETRIES}) – backing off")
                 time.sleep(5 * attempt)
             except Exception as e:
                 last_err = e
@@ -48,6 +60,8 @@ def _query_overpass(api_overpass_unused, query: str):
                 time.sleep(3 * attempt)
         print("[overpass] switching mirror…")
     raise last_err
+# ---- end helper ----
+
 
 
 api_overpass = overpy.Overpass()
