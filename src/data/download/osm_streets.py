@@ -11,9 +11,48 @@ from utils.helper import concatenate_geodataframes
 from utils.save_data import save_gdf_as_gpkg
 from .queries.create_queries import osm_street_queries
 
+# --- add near the imports ---
+import os, time, overpy
+
+UA       = os.getenv("OX_USER_AGENT", "pedestrian_network (set OX_USER_AGENT)")
+TIMEOUT  = int(os.getenv("OVERPASS_TIMEOUT", "240"))
+RETRIES  = int(os.getenv("OVERPASS_RETRIES", "3"))
+
+# overpy needs the /interpreter endpoint
+MIRRORS = [
+    os.getenv("OVERPASS_URL"),  # e.g. https://overpass.kumi.systems/api/interpreter
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://lz4.overpass-api.de/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+]
+MIRRORS = [m for m in MIRRORS if m]
+
+# --- REPLACE your old _query_overpass with this ---
+def _query_overpass(api_overpass_unused, query: str):
+    last_err = None
+    for url in MIRRORS:
+        print(f"[overpass] trying {url}")
+        api = overpy.Overpass(url=url, timeout=TIMEOUT, max_retry_count=0,
+                              headers={"User-Agent": UA})
+        for attempt in range(1, RETRIES + 1):
+            try:
+                return api.query(query)
+            except (overpy.exception.OverpassTooManyRequests,
+                    overpy.exception.OverpassGatewayTimeout) as e:
+                last_err = e
+                print(f"[overpass] {e.__class__.__name__} (attempt {attempt}/{RETRIES}) … backing off")
+                time.sleep(5 * attempt)
+            except Exception as e:
+                last_err = e
+                print(f"[overpass] error: {e} (attempt {attempt}/{RETRIES})")
+                time.sleep(3 * attempt)
+        print("[overpass] switching mirror…")
+    raise last_err
+
+
 api_overpass = overpy.Overpass()
 
-
+'''
 def _query_overpass(api, query):
     """
     Send a query to the Overpass API to retrieve geographic data.
@@ -34,7 +73,7 @@ def _query_overpass(api, query):
     """
 
     return api.query(query)
-
+'''
 
 def _parse_osm_result(result):
     """
