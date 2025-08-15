@@ -55,7 +55,7 @@ zensus_url : "https://www.zensus2011.de/SharedDocs/Downloads/DE/Pressemitteilung
 #gauskrueger crs
 gauss_crs : EPSG:31468
 # osm-values for the key highway
-street_types_list: ["primary", "secondary", "tertiary", "unclassified", "residential"]
+street_types_list: ["primary", "secondary", "tertiary", "unclassified", "residential", "	living_street", "pedestrian", "footway", "path"]
 # visualisationparams
 # not in code yet
 
