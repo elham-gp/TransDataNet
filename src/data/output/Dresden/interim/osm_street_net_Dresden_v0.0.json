@@ -1,0 +1,8 @@
+{
+    "filename": "osm_street_net_Dresden_v0.0",
+    "creation_date": "2025-08-15T09:50:37.847097",
+    "version": "0.0",
+    "stage": "interim",
+    "description": "Description of the contents",
+    "used in function:": "create_osm_streets_gdf"
+}

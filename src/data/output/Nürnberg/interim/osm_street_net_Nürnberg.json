@@ -1,0 +1,8 @@
+{
+    "filename": "osm_street_net_N\u00fcrnberg",
+    "creation_date": "2025-08-15T11:34:03.856259",
+    "version": "",
+    "stage": "interim",
+    "description": "Description of the contents",
+    "used in function:": "create_street_net_and_intersection_gpkg"
+}

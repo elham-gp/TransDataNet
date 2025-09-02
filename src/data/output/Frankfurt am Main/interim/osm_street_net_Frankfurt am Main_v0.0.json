@@ -1,0 +1,8 @@
+{
+    "filename": "osm_street_net_Frankfurt am Main_v0.0",
+    "creation_date": "2025-09-02T12:04:12.492238",
+    "version": "0.0",
+    "stage": "interim",
+    "description": "Description of the contents",
+    "used in function:": "create_osm_streets_gdf"
+}

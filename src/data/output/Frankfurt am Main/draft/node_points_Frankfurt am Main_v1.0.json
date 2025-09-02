@@ -1,0 +1,8 @@
+{
+    "filename": "node_points_Frankfurt am Main_v1.0",
+    "creation_date": "2025-09-02T12:04:12.646281",
+    "version": "1.0",
+    "stage": "draft",
+    "description": "Description of the contents",
+    "used in function:": "create_street_net_and_intersection_gpkg"
+}

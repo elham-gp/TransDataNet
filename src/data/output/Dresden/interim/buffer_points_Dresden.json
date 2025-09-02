@@ -1,0 +1,8 @@
+{
+    "filename": "buffer_points_Dresden",
+    "creation_date": "2025-08-15T09:50:38.070294",
+    "version": "",
+    "stage": "interim",
+    "description": "Description of the contents",
+    "used in function:": "create_street_net_and_intersection_gpkg"
+}

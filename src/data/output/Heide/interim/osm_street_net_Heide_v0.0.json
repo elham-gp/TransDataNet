@@ -1,0 +1,8 @@
+{
+    "filename": "osm_street_net_Heide_v0.0",
+    "creation_date": "2025-08-15T08:27:27.251555",
+    "version": "0.0",
+    "stage": "interim",
+    "description": "Description of the contents",
+    "used in function:": "create_osm_streets_gdf"
+}

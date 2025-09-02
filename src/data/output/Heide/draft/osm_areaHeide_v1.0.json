@@ -1,0 +1,8 @@
+{
+    "filename": "osm_areaHeide_v1.0",
+    "creation_date": "2025-08-15T08:28:44.978807",
+    "version": "1.0",
+    "stage": "draft",
+    "description": "Description of the contents",
+    "used in function:": "create_osm_area_gdf"
+}

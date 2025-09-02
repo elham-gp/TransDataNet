@@ -1,0 +1,8 @@
+{
+    "filename": "osm_area_Dresden_v1.1",
+    "creation_date": "2025-08-15T09:51:45.127202",
+    "version": "1.1",
+    "stage": "draft",
+    "description": "Description of the contents",
+    "used in function:": "assign_group_categorie_to_area"
+}

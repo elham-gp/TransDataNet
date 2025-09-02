@@ -1,0 +1,8 @@
+{
+    "filename": "osm_pois_R\u00fcsselsheim am Main_v1.0",
+    "creation_date": "2025-09-02T13:46:07.542366",
+    "version": "1.0",
+    "stage": "draft",
+    "description": "Description of the contents",
+    "used in function:": "create_osm_poi_gdf"
+}

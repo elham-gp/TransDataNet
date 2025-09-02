@@ -1,7 +1,7 @@
 {
     "filename": "buffer_points_Kiel",
-    "creation_date": "2024-06-03T17:11:03.298145",
-    "version": null,
+    "creation_date": "2025-08-15T14:22:37.264546",
+    "version": "",
     "stage": "interim",
     "description": "Description of the contents",
     "used in function:": "create_street_net_and_intersection_gpkg"

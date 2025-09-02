@@ -1,8 +1,0 @@
-{
-    "filename": "street_net_Kiel_v1.1",
-    "creation_date": "2024-06-03T17:32:19.163929",
-    "version": "1.1",
-    "stage": "draft",
-    "description": "Description of the contents",
-    "used in function:": "assign_distance_opnv"
-}
