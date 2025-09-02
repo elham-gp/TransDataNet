@@ -3,7 +3,11 @@
 openweatherapi_key : 9f548b05df513f03b9295e7abff9f41a
 
 #city to create the streetnet, poi ...
+<<<<<<< HEAD
 city_name: "Dresden"
+=======
+city_name: "Rüsselsheim am Main"
+>>>>>>> f8a1d0f75d050e4b833f139153fc0cc1dfe26893
 country_code: "DE"
 # 6 for cities
 
@@ -29,6 +33,10 @@ admin_level_city: 8
 # München = 6           check
 # Hamburg = 4           check
 #Frankfurt am Main = 8
+<<<<<<< HEAD
+=======
+#Rüsselsheim am Main = 8
+>>>>>>> f8a1d0f75d050e4b833f139153fc0cc1dfe26893
 
 #if the city name has special character or so
 english_city_name: False
