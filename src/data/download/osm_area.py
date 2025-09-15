@@ -16,8 +16,10 @@ from utils.save_data import save_gdf_as_gpkg
 from .osm_retry import fetch_osm_data
 from .queries.create_queries import osm_area_queries
 
-################################New#################################################################################
-import random
+# ---- unified helper (paste this, replacing the old one) ----
+UA       = os.getenv("OX_USER_AGENT", "pedestrian_network (set OX_USER_AGENT)")
+TIMEOUT  = int(os.getenv("OVERPASS_TIMEOUT", "240"))
+RETRIES  = int(os.getenv("OVERPASS_RETRIES", "3"))
 
 # overpy needs endpoints that end with /interpreter
 MIRRORS = [
@@ -26,62 +28,15 @@ MIRRORS = [
     "https://lz4.overpass-api.de/api/interpreter",
     "https://overpass-api.de/api/interpreter",
 ]
-
-
-# Tunables via env (with sensible defaults)
-OVERPASS_TIMEOUT = int(os.getenv("OVERPASS_TIMEOUT", "300"))
-OVERPASS_RETRIES = int(os.getenv("OVERPASS_RETRIES", "6"))
-COURTESY_SLEEP_S = float(os.getenv("OVERPASS_COURTESY_SLEEP", "1.0"))  # small delay between calls
+MIRRORS = [m for m in MIRRORS if m]
 
 def _add_timeout_to_query(q: str) -> str:
     q = q.strip()
-    return q if "[timeout:" in q else f"[timeout:{OVERPASS_TIMEOUT}];{q}"
+    # Add a global setting if the query doesn't already specify a timeout
+    if "[timeout:" not in q:
+        q = f"[timeout:{TIMEOUT}];" + q
+    return q
 
-def overpass_query_with_retry(query: str,
-                              retries: int = OVERPASS_RETRIES,
-                              base_sleep: float = 2.0,
-                              timeout: int = OVERPASS_TIMEOUT):
-    """
-    Rotate mirrors and back off on TooManyRequests / GatewayTimeout.
-    Returns an overpy.Result or raises the last exception after exhausting retries.
-    """
-    query = _add_timeout_to_query(query)
-    last_exc = None
-    start = random.randrange(len(MIRRORS))  # start on a random mirror
-
-    for i in range(retries):
-        url = MIRRORS[(start + i) % len(MIRRORS)]
-        api = overpy.Overpass(url=url, timeout=timeout)
-        try:
-            res = api.query(query)                 # ✅ real call (no recursion)
-            time.sleep(COURTESY_SLEEP_S)           # be nice to the servers
-            return res
-        except (overpy.exception.OverpassTooManyRequests,
-                overpy.exception.OverpassGatewayTimeout) as e:
-            last_exc = e
-            # Exponential backoff with cap + jitter
-            sleep_s = min(90.0, base_sleep * (2 ** i)) + random.random()
-            logging.warning(f"[overpass] {e.__class__.__name__} on {url}; retrying in {sleep_s:.1f}s")
-            time.sleep(sleep_s)
-            continue
-        except Exception as e:
-            # Other transient network errors → also backoff
-            last_exc = e
-            sleep_s = min(60.0, base_sleep * (1 + i)) + random.random()
-            logging.warning(f"[overpass] error {e} on {url}; retrying in {sleep_s:.1f}s")
-            time.sleep(sleep_s)
-            continue
-
-    # all attempts failed
-    raise last_exc if last_exc else RuntimeError("Overpass query failed without specific exception")
-
-def _query_overpass(query: str):
-    """Thin wrapper used by the rest of this module."""
-    return overpass_query_with_retry(query)
-# --- end add ---
-################################New#################################################################################
-
-'''
 def _query_overpass(*args):
     """
     Works with both call styles used in this repo:
@@ -124,14 +79,14 @@ def _query_overpass(*args):
     raise last_err
 
 # ---- end helper ----
-'''
+
 
 
 # Configure logging
 logging.basicConfig(filename='Result_area_insights.txt',
                     level=logging.INFO, filemode='w')
 
-#api = overpy.Overpass()
+api = overpy.Overpass()
 '''
 def _query_overpass(query):
     """
@@ -157,7 +112,7 @@ def _query_overpass(query):
         # Process the result as needed
     except Exception as e:
         print(f"Error fetching OSM data: {e}")  
-
+'''
 
 def _parse_osm_area_result(result: overpy.Result, osm_key: str, osm_value: str, **kwargs):
     """
@@ -181,7 +136,7 @@ def _parse_osm_area_result(result: overpy.Result, osm_key: str, osm_value: str, 
         for member in relation.members:
             member_ref = member.ref
             polygon_line_query = f"way({member_ref});(._;>;);out geom;"
-            polygon_line_result = overpass_query_with_retry(polygon_line_query)
+            polygon_line_result = api.query(polygon_line_query)
             for polygon_line in polygon_line_result.ways:
                     coordinates = [(node.lon, node.lat) for node in polygon_line.nodes]
                     line = LineString(coordinates)
@@ -229,66 +184,8 @@ def _parse_osm_area_result(result: overpy.Result, osm_key: str, osm_value: str, 
 
     # create a GeoDataFrame from the dictionary
     return gpd.GeoDataFrame(data, crs="EPSG:4326").to_crs("EPSG:31468") # type: ignore
-'''
-def _parse_osm_area_result(result: overpy.Result, osm_key: str, osm_value: str, **kwargs) -> gpd.GeoDataFrame:
-    """
-    Parses an Overpass result into a GeoDataFrame (EPSG:31468).
-    Builds polygons from relation members (outer/inner) and ways.
-    """
-    data = {'id': [], 'osm_key': [], 'osm_value': [], 'geometry': []}
-    result_polygons = []
-    possible_double_ids = []
-    inner_polygons = []
 
-    for relation in result.relations:
-        outer_polygons = []
 
-        for member in relation.members:
-            member_ref = member.ref
-            polygon_line_query = f"way({member_ref});(._;>;);out geom;"
-            polygon_line_result = overpass_query_with_retry(polygon_line_query)
-
-            for polygon_line in polygon_line_result.ways:
-                coordinates = [(node.lon, node.lat) for node in polygon_line.nodes]
-                line = LineString(coordinates)
-                polygons = list(polygonize([line]))
-
-                for polygon in polygons:
-                    if polygon.is_valid and polygon.area > 0:
-                        if member.role == "outer":
-                            outer_polygons.append(polygon)
-                            possible_double_ids.append(polygon_line.id)
-                        elif member.role == "inner":
-                            inner_polygons.append(polygon)
-                            possible_double_ids.append(polygon_line.id)
-
-        for outer_polygon in outer_polygons:
-            current_polygon = outer_polygon
-            for inner_polygon in inner_polygons:
-                current_polygon = current_polygon.difference(inner_polygon)
-            if not current_polygon.is_empty:
-                result_polygons.append((current_polygon, relation.id))
-
-    for way in result.ways:
-        # If a way already used for relation polygon, skip duplicates
-        if way.id in possible_double_ids:
-            print(f"Doppelte id entdeckt in {osm_key} : {osm_value}")
-        else:
-            if len(way.nodes) >= 4:
-                polygon = Polygon([(node.lon, node.lat) for node in way.nodes])
-                if polygon.is_valid:
-                    result_polygons.append((polygon, way.id))
-
-    for polygon, polygon_id in result_polygons:
-        data['id'].append(polygon_id)
-        data['osm_key'].append(osm_key)
-        data['osm_value'].append(osm_value)
-        data['geometry'].append(polygon)
-
-    gdf = gpd.GeoDataFrame(data, crs="EPSG:4326")
-    return gdf.to_crs("EPSG:31468")  # type: ignore
-
-'''
 
 def create_osm_area_gdf():
     """
@@ -329,41 +226,6 @@ def create_osm_area_gdf():
     else:
         logging.info("No area result in " + config_data["city_name"])
 
-        return None
-'''
-def create_osm_area_gdf():
-    """
-    Creates a GeoDataFrame of OpenStreetMap areas from configured queries.
-    Saves it as a GeoPackage and returns the GeoDataFrame, or None if nothing was found.
-    """
-    list_of_gdf = []
-
-    for query_info in tqdm(osm_area_queries, desc="Querying Overpass"):
-        area_query = query_info['query']
-        osm_key = query_info['key']
-        osm_value = query_info['value']
-
-        try:
-            result = _query_overpass(area_query)
-        except Exception as e:
-            logging.warning(f"Overpass failed for {osm_key} - {osm_value}: {e}")
-            continue
-
-        if result is not None:
-            gdf = _parse_osm_area_result(result, osm_key, osm_value)
-            list_of_gdf.append(gdf)
-            number_of_areas = len(result.areas)
-            logging.info(f"{osm_key} OsmValue: {osm_value} Anzahl_areas {number_of_areas}")
-        else:
-            logging.warning(f"Missing result for query: {osm_key} - {osm_value}")
-            continue
-
-    if list_of_gdf:  # only proceed if we have at least one result
-        osm_area_gdf = concatenate_geodataframes(list_of_gdf)
-        save_gdf_as_gpkg(osm_area_gdf, "osm_area" + config_data["city_name"], version="1.0")
-        return osm_area_gdf
-    else:
-        logging.info("No area result in " + config_data["city_name"])
         return None
 
 def main():
