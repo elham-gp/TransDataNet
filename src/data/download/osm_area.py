@@ -15,6 +15,38 @@ from utils.save_data import save_gdf_as_gpkg
 
 from .osm_retry import fetch_osm_data
 from .queries.create_queries import osm_area_queries
+############################################New##################################################
+import time
+import random
+
+OVERPASS_ENDPOINTS = [
+    "https://lz4.overpass-api.de/api/interpreter",   # fast mirror
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass-api.de/api/interpreter",
+]
+
+def overpass_query_with_retry(query, retries=7, base_sleep=2.0, timeout=300):
+    """
+    Tries multiple Overpass mirrors with exponential backoff.
+    Handles 'Too many requests' and 'Server load too high' gracefully.
+    """
+    last_exc = None
+    # start at a random mirror to spread load
+    start = random.randrange(len(OVERPASS_ENDPOINTS))
+    for i in range(retries):
+        url = OVERPASS_ENDPOINTS[(start + i) % len(OVERPASS_ENDPOINTS)]
+        api = overpy.Overpass(url=url, timeout=timeout)
+        try:
+            return overpass_query_with_retry(query)
+        except (overpy.exception.OverpassTooManyRequests,
+                overpy.exception.OverpassGatewayTimeout) as e:
+            last_exc = e
+            # backoff: 2, 4, 8, 16, 32, 64, 90s (capped)
+            sleep_s = min(90.0, base_sleep * (2 ** i)) + random.random()
+            time.sleep(sleep_s)
+            continue
+    raise last_exc if last_exc else RuntimeError("Overpass query failed without a specific exception")
+#################################################################################################################
 
 # ---- unified helper (paste this, replacing the old one) ----
 UA       = os.getenv("OX_USER_AGENT", "pedestrian_network (set OX_USER_AGENT)")
@@ -63,7 +95,7 @@ def _query_overpass(*args):
 
         for attempt in range(1, RETRIES + 1):
             try:
-                return api.query(query)
+                return overpass_query_with_retry(query)
             except (overpy.exception.OverpassTooManyRequests,
                     overpy.exception.OverpassGatewayTimeout) as e:
                 last_err = e
@@ -136,7 +168,7 @@ def _parse_osm_area_result(result: overpy.Result, osm_key: str, osm_value: str, 
         for member in relation.members:
             member_ref = member.ref
             polygon_line_query = f"way({member_ref});(._;>;);out geom;"
-            polygon_line_result = api.query(polygon_line_query)
+            polygon_line_result = overpass_query_with_retry(polygon_line_query)
             for polygon_line in polygon_line_result.ways:
                     coordinates = [(node.lon, node.lat) for node in polygon_line.nodes]
                     line = LineString(coordinates)
