@@ -11,7 +11,7 @@ adminlevel_country : https://wiki.openstreetmap.org/wiki/DE:Grenze#Staatsgrenze_
 adminlevel_for_cities : https://www.openstreetmap.org/ 
 
 admin_level_country: 2
-admin_level_city: 6
+admin_level_city: 4
 
 #info zu admin_level
 # Leipzig = 6           check
@@ -32,7 +32,7 @@ admin_level_city: 6
 # Rüsselsheim am Main = 8
 # Köln = 6
 # Berlin (the whole city-state) = 4
-# Berlin’s 12 Bezirke (districts) = 6
+# Berlin’s 12 Bezirke (districts) = 6  !!!!!not working!!!!
 # Ortsteile (localities / subdistricts, 96 in total) = 9
 
 
