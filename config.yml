@@ -3,7 +3,7 @@
 openweatherapi_key : 9f548b05df513f03b9295e7abff9f41a
 
 #city to create the streetnet, poi ...
-city_name: "Nürnberg"
+city_name: "Dresden"
 country_code: "DE"
 # 6 for cities
 
@@ -35,6 +35,7 @@ admin_level_city: 4
 # Berlin’s 12 Bezirke (districts) = 6  !!!!!not working!!!!
 # Ortsteile (localities / subdistricts, 96 in total) = 9
 # Nürnberg = 6
+# Dresden = 6
 
 
 #if the city name has special character or so
