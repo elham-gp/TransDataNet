@@ -3,7 +3,7 @@
 openweatherapi_key : 9f548b05df513f03b9295e7abff9f41a
 
 #city to create the streetnet, poi ...
-city_name: "Dresden"
+city_name: "Nürnberg"
 country_code: "DE"
 # 6 for cities
 
@@ -11,7 +11,7 @@ adminlevel_country : https://wiki.openstreetmap.org/wiki/DE:Grenze#Staatsgrenze_
 adminlevel_for_cities : https://www.openstreetmap.org/ 
 
 admin_level_country: 2
-admin_level_city: 8
+admin_level_city: 6
 
 #info zu admin_level
 # Leipzig = 6           check
