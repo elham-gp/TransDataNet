@@ -35,7 +35,7 @@ admin_level_city: 6
 # Berlin’s 12 Bezirke (districts) = 6  !!!!!not working!!!!
 # Ortsteile (localities / subdistricts, 96 in total) = 9
 # Nürnberg = 8
-# Dresden = 8?
+# Dresden = 6?
 
 
 #if the city name has special character or so
