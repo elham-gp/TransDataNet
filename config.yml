@@ -11,7 +11,7 @@ adminlevel_country : https://wiki.openstreetmap.org/wiki/DE:Grenze#Staatsgrenze_
 adminlevel_for_cities : https://www.openstreetmap.org/ 
 
 admin_level_country: 2
-admin_level_city: 6
+admin_level_city: 8
 
 #info zu admin_level
 # Leipzig = 6           check
