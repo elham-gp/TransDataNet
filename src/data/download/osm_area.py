@@ -113,7 +113,7 @@ def _query_overpass(query):
     except Exception as e:
         print(f"Error fetching OSM data: {e}")  
 '''
-
+'''
 def _parse_osm_area_result(result: overpy.Result, osm_key: str, osm_value: str, **kwargs):
     """
     Parses the result of a query to a GeoDataFrame.
@@ -184,6 +184,83 @@ def _parse_osm_area_result(result: overpy.Result, osm_key: str, osm_value: str, 
 
     # create a GeoDataFrame from the dictionary
     return gpd.GeoDataFrame(data, crs="EPSG:4326").to_crs("EPSG:31468") # type: ignore
+'''
+#This is the last def's modified version to avoid "too many requests" for larger cities, made by Elham
+def _parse_osm_area_result(result: overpy.Result, osm_key: str, osm_value: str, **kwargs):
+    """
+    Parses the result of a query to a GeoDataFrame.
+
+    Args:
+        result: The result of the query.
+    """
+
+    # Create an empty dictionary to store the data
+    data = {'id': [], 'osm_key': [], 'osm_value': [], 'geometry': []}
+    result_polygons = []
+    
+    for relation in result.relations:
+        # These must be reset per relation
+        outer_polygons = []
+        possible_double_ids = []
+        inner_polygons = []
+
+
+        for member in relation.members:
+
+            # Only fetch ways; skip nodes/relations
+            if getattr(member, "type", None) != "way":
+                continue
+
+            member_ref = member.ref
+            polygon_line_query = f"way({member_ref});(._;>;);out geom;"
+
+            polygon_line_result = api.query(polygon_line_query)
+
+            for polygon_line in polygon_line_result.ways:
+                    coordinates = [(node.lon, node.lat) for node in polygon_line.nodes]
+                    line = LineString(coordinates)
+                    polygons = list(polygonize([line]))
+                    
+                    for polygon in polygons:
+                        if polygon.is_valid and polygon.area > 0:  # Check for validity and non-zero area
+
+                            # Check if the member role is "inner" or "outer"
+                            if member.role == "outer":
+                                outer_polygons.append(polygon)
+                                possible_double_ids.append(polygon_line.id)
+                            elif member.role == "inner":
+                                inner_polygons.append(polygon)
+                                possible_double_ids.append(polygon_line.id)
+
+        for outer_polygon in outer_polygons:
+            # Create a copy of the outer polygon to avoid modifying the original
+            current_polygon = outer_polygon
+
+            # Subtract each inner polygon from the current outer polygon
+            for inner_polygon in inner_polygons:
+                current_polygon = current_polygon.difference(inner_polygon)
+
+            # If the result is not empty, append it to the list
+            if not current_polygon.is_empty:
+                result_polygons.append((current_polygon, relation.id))
+        
+    for way in result.ways:
+
+        if len(way.nodes) >= 4:
+            
+            polygon = Polygon([(node.lon, node.lat) for node in way.nodes])
+            if polygon.is_valid:
+                result_polygons.append((polygon, way.id))
+
+    for polygon, polygon_id in result_polygons:
+        data['id'].append(polygon_id)
+        data['osm_key'].append(osm_key)
+        data['osm_value'].append(osm_value)
+        data['geometry'].append(polygon)
+
+    # create a GeoDataFrame from the dictionary
+    return gpd.GeoDataFrame(data, crs="EPSG:4326").to_crs("EPSG:31468") # type: ignore
+
 
 
 
