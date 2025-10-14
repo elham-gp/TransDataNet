@@ -46,17 +46,7 @@ pois_gdf = gpd.read_file(pois_filepath)
 census_gdf = gpd.read_file(census_filepath)
 
 
-# if population improvement applies:
-census_pts = census_gdf.to_crs(street_net_optimized_buffered_gdf.crs).copy()
 
-def square_from_point(p, h):
-    return box(p.x - h, p.y - h, p.x + h, p.y + h)
-
-census_sq = census_pts.copy()
-census_sq["geometry"] = census_pts.geometry.apply(lambda p: square_from_point(p, SQUARE_HALF_SIDE_M))
-census_sq["Einwohner"] = pd.to_numeric(census_sq["Einwohner"], errors="coerce").fillna(0.0)
-
-census_sq_sindex = census_sq.sindex
 
 
 #area_gdf = area_gdf.to_crs("EPSG:32188")
@@ -112,6 +102,18 @@ for header in list_of_header:
 # Initialize a new column for the sum of values
 # Columns with counts
 street_net_optimized_gdf['Summe Einwohner'] = 0
+
+# if population improvement applies:
+census_pts = census_gdf.to_crs(street_net_optimized_buffered_gdf.crs).copy()
+
+def square_from_point(p, h):
+    return box(p.x - h, p.y - h, p.x + h, p.y + h)
+
+census_sq = census_pts.copy()
+census_sq["geometry"] = census_pts.geometry.apply(lambda p: square_from_point(p, SQUARE_HALF_SIDE_M))
+census_sq["Einwohner"] = pd.to_numeric(census_sq["Einwohner"], errors="coerce").fillna(0.0)
+
+census_sq_sindex = census_sq.sindex
 
 
 # if population improvement applies:
