@@ -228,13 +228,7 @@ street_net_optimized_gdf["Bedeutung je km"] = round(
 # if population improvement applies:
 # New je-km metric that includes population-based Bedeutung; original stays as-is 
 street_net_optimized_gdf['Bedeutung je km (incl Pop)'] = round(
-    (
-        street_net_optimized_gdf['Summe AREA*Bedeutung']
-      + street_net_optimized_gdf['Summe POI*Bedeutung']
-      + street_net_optimized_gdf['Summe BEV*Bedeutung (Squares)']
-    ) / street_net_optimized_gdf['laenge [km]'],
-    2
-)
+    (street_net_optimized_gdf['Summe AREA*Bedeutung'] + street_net_optimized_gdf['Summe POI*Bedeutung'] + street_net_optimized_gdf['Summe BEV*Bedeutung (Squares)']) / street_net_optimized_gdf['laenge [km]'],2)
 
 
 street_net_optimized_gdf["Einwohner je km"] = round(
