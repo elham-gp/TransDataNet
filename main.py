@@ -11,11 +11,11 @@ from shapely.geometry import box
 
 #buffer in meter
 buffersize = config_data["street_buffer_size"]
-'''
+
 # if population improvement applies:
 # make square buffers around census points 
 SQUARE_HALF_SIDE_M = 50  # 50 m → 100 m squares; adjust as needed
-'''
+
 #counts_csv_filepath = r""
 
 # census = r"src\data\output\zensus_100x100.gpkg"
@@ -45,7 +45,7 @@ area_gdf = gpd.read_file(area_filepath)
 pois_gdf = gpd.read_file(pois_filepath)
 census_gdf = gpd.read_file(census_filepath)
 
-'''
+
 # if population improvement applies:
 census_pts = census_gdf.to_crs(street_net_optimized_buffered_gdf.crs).copy()
 
@@ -57,7 +57,7 @@ census_sq["geometry"] = census_pts.geometry.apply(lambda p: square_from_point(p,
 census_sq["Einwohner"] = pd.to_numeric(census_sq["Einwohner"], errors="coerce").fillna(0.0)
 
 census_sq_sindex = census_sq.sindex
-'''
+
 
 #area_gdf = area_gdf.to_crs("EPSG:32188")
 #pois_gdf = pois_gdf.to_crs("EPSG:32188")
@@ -113,15 +113,14 @@ for header in list_of_header:
 # Columns with counts
 street_net_optimized_gdf['Summe Einwohner'] = 0
 
-'''
+
 # if population improvement applies:
 street_net_optimized_gdf['Summe Einwohner (Squares)'] = 0.0
 street_net_optimized_gdf['Summe BEV*Bedeutung'] = 0.0
-'''
+
 # Columns with Bedeutung
 street_net_optimized_gdf['Summe POI*Bedeutung'] = 0
 street_net_optimized_gdf['Summe AREA*Bedeutung'] = 0
-#street_net_optimized_gdf['Summe Einwohner'] = 0
 
 # Create a spatial index for the census GeoDataFrame
 census_sindex = census_gdf.sindex
@@ -135,7 +134,7 @@ for idx, buffered_line in tqdm(street_net_optimized_buffered_gdf.iterrows()):
     # assign to id in original gdf
     street_net_optimized_gdf.at[idx, 'Summe Einwohner'] = intersected_points['Einwohner'].sum()
 
-'''
+
 # if population improvement applies:
 # per street buffer: sum population and its Bedeutung (= pop * 0.02) 
 for idx, buffered_line in tqdm(street_net_optimized_buffered_gdf.iterrows()):
@@ -146,7 +145,15 @@ for idx, buffered_line in tqdm(street_net_optimized_buffered_gdf.iterrows()):
     einw_sq_sum = touched['Einwohner'].sum()
     street_net_optimized_gdf.at[idx, 'Summe Einwohner (Squares)'] = einw_sq_sum
     street_net_optimized_gdf.at[idx, 'Summe BEV*Bedeutung'] = einw_sq_sum * 0.02
-'''
+
+    # print every 500th street (adjust as you like)
+    if idx % 500 == 0:
+        from tqdm import tqdm
+        tqdm.write(
+            f"[idx={idx}] Einwohner in squares = {einw_sq_sum:.0f}  ->  "
+            f"Summe BEV*Bedeutung = {einw_sq_sum * 0.02:.2f}"
+        )
+
 # Iterate through lines and update the Summe POI*Bedeutung column
 for idx, line in tqdm(street_net_optimized_gdf.iterrows()):
     intersected_pois = pois_buffered_gdf[pois_buffered_gdf['geometry'].intersects(line['geometry'])]
@@ -215,7 +222,7 @@ for idx, line in tqdm(street_net_optimized_gdf.iterrows()):
 street_net_optimized_gdf["Bedeutung je km"] = round(
     (street_net_optimized_gdf["Summe AREA*Bedeutung"] + street_net_optimized_gdf['Summe POI*Bedeutung']) / street_net_optimized_gdf["laenge [km]"], 2)
 
-'''
+
 # if population improvement applies:
 # New je-km metric that includes population-based Bedeutung; original stays as-is 
 street_net_optimized_gdf['Bedeutung je km (incl Pop)'] = round(
@@ -226,7 +233,7 @@ street_net_optimized_gdf['Bedeutung je km (incl Pop)'] = round(
     ) / street_net_optimized_gdf['laenge [km]'],
     2
 )
-'''
+
 
 street_net_optimized_gdf["Einwohner je km"] = round(
     street_net_optimized_gdf['Summe Einwohner']/street_net_optimized_gdf["laenge [km]"], 2)
