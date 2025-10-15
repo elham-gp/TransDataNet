@@ -123,8 +123,8 @@ street_net_optimized_gdf['Summe Einwohner (Squares)'] = 0.0
 street_net_optimized_gdf['Summe POP*Bedeutung'] = 0.0
 
 # Columns with Bedeutung
-street_net_optimized_gdf['Summe POI*Bedeutung'] = 0
-street_net_optimized_gdf['Summe AREA*Bedeutung'] = 0
+street_net_optimized_gdf['Summe POI*Bedeutung'] = 0.0
+street_net_optimized_gdf['Summe AREA*Bedeutung'] = 0.0
 
 # Create a spatial index for the census GeoDataFrame
 census_sindex = census_gdf.sindex
