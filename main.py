@@ -111,13 +111,15 @@ def square_from_point(p, h):
 
 census_sq = census_pts.copy()
 census_sq["geometry"] = census_pts.geometry.apply(lambda p: square_from_point(p, SQUARE_HALF_SIDE_M))
-census_sq["Einwohner (Square)"] = pd.to_numeric(census_sq["Einwohner (Square)"], errors="coerce").fillna(0.0)
+census_sq["Einwohner"] = pd.to_numeric(census_sq["Einwohner"], errors="coerce").fillna(0.0)
 
 census_sq_sindex = census_sq.sindex
 
 
 # if population improvement applies:
 street_net_optimized_gdf['Summe Einwohner'] = 0.0
+
+street_net_optimized_gdf['Summe Einwohner (Squares)'] = 0.0
 street_net_optimized_gdf['Summe POP*Bedeutung'] = 0.0
 
 # Columns with Bedeutung
@@ -145,7 +147,7 @@ for idx, buffered_line in tqdm(street_net_optimized_buffered_gdf.iterrows()):
     cand = census_sq.iloc[cand_idx]
     touched = cand[cand['geometry'].intersects(buffered_line['geometry'])]
 
-    einw_sq_sum = touched['Einwohner (Square)'].sum()
+    einw_sq_sum = touched['Einwohner'].sum()
     street_net_optimized_gdf.at[idx, 'Summe Einwohner (Squares)'] = einw_sq_sum
     street_net_optimized_gdf.at[idx, 'Summe POP*Bedeutung'] = einw_sq_sum * 0.02
 
