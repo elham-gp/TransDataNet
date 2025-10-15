@@ -111,14 +111,14 @@ def square_from_point(p, h):
 
 census_sq = census_pts.copy()
 census_sq["geometry"] = census_pts.geometry.apply(lambda p: square_from_point(p, SQUARE_HALF_SIDE_M))
-census_sq["Einwohner"] = pd.to_numeric(census_sq["Einwohner"], errors="coerce").fillna(0.0)
+census_sq["Einwohner (Square)"] = pd.to_numeric(census_sq["Einwohner (Square)"], errors="coerce").fillna(0.0)
 
 census_sq_sindex = census_sq.sindex
 
 
 # if population improvement applies:
-street_net_optimized_gdf['Summe Einwohner (Squares)'] = 0.0
-street_net_optimized_gdf['Summe BEV*Bedeutung'] = 0.0
+street_net_optimized_gdf['Summe Einwohner'] = 0.0
+street_net_optimized_gdf['Summe POP*Bedeutung'] = 0.0
 
 # Columns with Bedeutung
 street_net_optimized_gdf['Summe POI*Bedeutung'] = 0
@@ -139,21 +139,22 @@ for idx, buffered_line in tqdm(street_net_optimized_buffered_gdf.iterrows()):
 
 # if population improvement applies:
 # per street buffer: sum population and its Bedeutung (= pop * 0.02) 
+# Iterate through lines and update the Summe Summe POP*Bedeutung column
 for idx, buffered_line in tqdm(street_net_optimized_buffered_gdf.iterrows()):
     cand_idx = list(census_sq_sindex.intersection(buffered_line['geometry'].bounds))
     cand = census_sq.iloc[cand_idx]
     touched = cand[cand['geometry'].intersects(buffered_line['geometry'])]
 
-    einw_sq_sum = touched['Einwohner'].sum()
+    einw_sq_sum = touched['Einwohner (Square)'].sum()
     street_net_optimized_gdf.at[idx, 'Summe Einwohner (Squares)'] = einw_sq_sum
-    street_net_optimized_gdf.at[idx, 'Summe BEV*Bedeutung'] = einw_sq_sum * 0.02
+    street_net_optimized_gdf.at[idx, 'Summe POP*Bedeutung'] = einw_sq_sum * 0.02
 
     # print every 500th street (adjust as you like)
     if idx % 500 == 0:
         from tqdm import tqdm
         tqdm.write(
             f"[idx={idx}] Einwohner in squares = {einw_sq_sum:.0f}  ->  "
-            f"Summe BEV*Bedeutung = {einw_sq_sum * 0.02:.2f}"
+            f"Summe POP*Bedeutung = {einw_sq_sum * 0.02:.2f}"
         )
 
 # Iterate through lines and update the Summe POI*Bedeutung column
@@ -228,7 +229,7 @@ street_net_optimized_gdf["Bedeutung je km"] = round(
 # if population improvement applies:
 # New je-km metric that includes population-based Bedeutung; original stays as-is 
 street_net_optimized_gdf['Bedeutung je km (incl Pop)'] = round(
-    (street_net_optimized_gdf['Summe AREA*Bedeutung'] + street_net_optimized_gdf['Summe POI*Bedeutung'] + street_net_optimized_gdf['Summe BEV*Bedeutung (Squares)']) / street_net_optimized_gdf['laenge [km]'],2)
+    (street_net_optimized_gdf['Summe AREA*Bedeutung'] + street_net_optimized_gdf['Summe POI*Bedeutung'] + street_net_optimized_gdf['Summe POP*Bedeutung']) / street_net_optimized_gdf['laenge [km]'], 2)
 
 
 street_net_optimized_gdf["Einwohner je km"] = round(
