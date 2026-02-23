@@ -53,7 +53,7 @@ census_gdf = gpd.read_file(census_filepath)
 #pois_gdf = pois_gdf.to_crs("EPSG:32188")
 print("Zensus loading done!")
 # filter street net to only use streets thar are longer than 100
-#street_net_optimized_gdf = street_net_optimized_gdf[street_net_optimized_gdf["laenge [km]"] >= 0.1]
+street_net_optimized_gdf = street_net_optimized_gdf[street_net_optimized_gdf["laenge [km]"] >= 0.1]
 
 # buffer street net by buffersize ands create new geodataframe
 street_net_optimized_buffered_gdf = street_net_optimized_gdf.copy()
@@ -226,6 +226,36 @@ for idx, line in tqdm(street_net_optimized_gdf.iterrows()):
 # caluculate overall results
 street_net_optimized_gdf["Bedeutung je km"] = round(
     (street_net_optimized_gdf["Summe AREA*Bedeutung"] + street_net_optimized_gdf['Summe POI*Bedeutung']) / street_net_optimized_gdf["laenge [km]"], 2)
+
+# =========================
+# Pedestrian Volume (PV)
+# =========================
+
+# These are the exact column names created earlier as "<Group>: Anzahl"
+col_x1 = "Dienstleistung, Einzelhandel, Gastronomie: Anzahl"
+col_x2 = "Hotels, Pensionen: Anzahl"
+
+# Make sure the columns exist (if a group never appears, it should still exist as 0 because you initialized headers)
+if col_x1 not in street_net_optimized_gdf.columns:
+    street_net_optimized_gdf[col_x1] = 0
+if col_x2 not in street_net_optimized_gdf.columns:
+    street_net_optimized_gdf[col_x2] = 0
+
+# denominator: laenge [km] * 10  (avoid division by zero)
+denom = (street_net_optimized_gdf["laenge [km]"].astype(float) * 10.0).replace(0, np.nan)
+
+x1 = street_net_optimized_gdf[col_x1].astype(float) / denom
+x2 = street_net_optimized_gdf[col_x2].astype(float) / denom
+
+# coefficients
+b0 = 6.923
+b1 = 0.006
+b2 = 0.098
+
+street_net_optimized_gdf['PV'] = np.exp(b0 + b1 * x1 + b2 * x2).fillna(0)
+
+# (optional) round for readability
+street_net_optimized_gdf['PV'] = street_net_optimized_gdf["PV"].round(0)
 
 
 # if population improvement applies:
