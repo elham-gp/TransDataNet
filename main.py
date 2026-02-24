@@ -8,6 +8,7 @@ from src.utils.load_data import find_geo_packages
 from src.utils.save_data import save_gdf_as_gpkg
 
 from shapely.geometry import box
+import numpy as np
 
 #buffer in meter
 buffersize = config_data["street_buffer_size"]
