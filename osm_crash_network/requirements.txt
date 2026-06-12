@@ -1,0 +1,7 @@
+osmnx
+geopandas
+pandas
+shapely
+networkx
+pyogrio
+rtree
