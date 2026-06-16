@@ -1,0 +1,11 @@
+data/
+outputs/
+*.gpkg
+*.graphml
+*.shp
+*.dbf
+*.shx
+*.prj
+*.cpg
+__pycache__/
+.ipynb_checkpoints/
