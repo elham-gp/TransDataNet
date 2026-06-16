@@ -98,7 +98,7 @@ G_raw = ox.graph_from_place(
     retain_all=True,
 )
 
-print(f"Raw graph downloaded:")
+print("Raw graph downloaded:")
 print(f"  Nodes: {len(G_raw.nodes):,}")
 print(f"  Edges: {len(G_raw.edges):,}")
 
@@ -161,8 +161,8 @@ edges.to_file(
 
 print("=" * 60)
 print("Done.")
-print(f"Raw GraphML saved to:")
+print("Raw GraphML saved to:")
 print(f"  {RAW_GRAPHML}")
-print(f"Raw GeoPackage saved to:")
+print("Raw GeoPackage saved to:")
 print(f"  {RAW_GPKG}")
 print("=" * 60)
