@@ -26,7 +26,7 @@ DATA_ROOT = Path(
     r"Z:\_Public\Promotionen\Golpayegani\Paper3\OSM_Network_Simplification\GIS_Data"
 )
 
-JUNCTION_BUFFER_METERS = 25
+JUNCTION_BUFFER_METERS = 20
 MIN_RELEVANT_CONNECTIONS = 3
 
 # Road classes that count as real street connections
