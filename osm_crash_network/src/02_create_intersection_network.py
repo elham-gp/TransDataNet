@@ -68,7 +68,7 @@ PROCESSED_DIR = CITY_DIR / "processed"
 PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
 SEGMENT_GRAPHML = PROCESSED_DIR / f"{CITY.lower()}_segment_network.graphml"
-JUNCTION_GPKG = PROCESSED_DIR / f"{CITY.lower()}_junction_areas_strict.gpkg"
+JUNCTION_GPKG = PROCESSED_DIR / f"{CITY.lower()}_junction_areas.gpkg"
 
 print("=" * 60)
 print("Creating strict junction areas for crash analysis")
@@ -80,7 +80,7 @@ print("=" * 60)
 if not SEGMENT_GRAPHML.exists():
     raise FileNotFoundError(
         f"Segment GraphML not found:\n{SEGMENT_GRAPHML}\n"
-        "Run 02_create_segment_network.py first."
+        "Run 01_create_segment_network.py first."
     )
 
 # -----------------------------
