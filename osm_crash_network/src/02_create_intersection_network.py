@@ -195,7 +195,7 @@ junction_areas = gpd.GeoDataFrame(
 junction_areas["junction_id"] = junction_areas.index + 1
 junction_areas["buffer_m"] = JUNCTION_BUFFER_METERS
 junction_areas["min_relevant_connections"] = MIN_RELEVANT_CONNECTIONS
-junction_areas["analysis_level"] = "strict_junction_area"
+junction_areas["analysis_level"] = "junction_area"
 junction_areas["area_m2"] = junction_areas.geometry.area
 
 print(f"Final junction areas: {len(junction_areas):,}")
