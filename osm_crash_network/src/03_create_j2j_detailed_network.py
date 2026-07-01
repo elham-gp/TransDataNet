@@ -1,8 +1,8 @@
 from pathlib import Path
-from collections import defaultdict
 
 import geopandas as gpd
 import pandas as pd
+import networkx as nx
 from shapely.ops import unary_union, linemerge
 
 # ============================================================
@@ -10,18 +10,18 @@ from shapely.ops import unary_union, linemerge
 #
 # Level 3A: J2J-Detailed Network
 #
-# Inputs:
-# - Level 1 segment_nodes
-# - Level 2 relevant_road_edges
-# - Level 2 junction_areas
+# Component-based logic:
+# 1. Load Level 1 segment_nodes.
+# 2. Load Level 2 relevant_road_edges and junction_areas.
+# 3. Contract nodes inside junction areas into JUNCTION_x supernodes.
+# 4. Remove edges fully inside one junction area.
+# 5. Build connected components from non-junction edges.
+# 6. Add boundary edges back to each component.
+# 7. Merge component edges into Level 3A edges.
 #
-# Purpose:
-# Merge tiny relevant road edges into longer edges from one
-# junction area to the next junction area.
-#
-# Main rule:
-# Junction areas are the main breakpoints.
-# Intermediate graph nodes are NOT breakpoints.
+# Outputs:
+# - Level 3A: j2j_detailed_network
+# - Level 3A: problem_edges
 # ============================================================
 
 CITY = "Dresden"
@@ -36,11 +36,10 @@ OUTPUT_DIR = CITY_DIR / "outputs"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 SEGMENT_GPKG = PROCESSED_DIR / f"{CITY.lower()}_segment_network.gpkg"
-INTERSECTION_GPKG = PROCESSED_DIR / f"{CITY.lower()}_intersection_network.gpkg"
+INTERSECTION_GPKG = PROCESSED_DIR / f"{CITY.lower()}_junction_areas.gpkg"
 
 OUTPUT_GPKG = PROCESSED_DIR / f"{CITY.lower()}_j2j_detailed_network.gpkg"
 MAPPING_CSV = OUTPUT_DIR / f"{CITY.lower()}_j2j_detailed_mapping.csv"
-EDGE_USAGE_CSV = OUTPUT_DIR / f"{CITY.lower()}_j2j_source_edge_usage.csv"
 
 SEGMENT_NODES_LAYER = "segment_nodes"
 RELEVANT_EDGES_LAYER = "relevant_road_edges"
@@ -48,12 +47,12 @@ JUNCTION_AREAS_LAYER = "junction_areas"
 
 
 def unique_join(values):
-    clean = []
+    vals = []
     for v in values:
         if pd.isna(v):
             continue
-        clean.append(str(v))
-    return ";".join(sorted(set(clean)))
+        vals.append(str(v))
+    return ";".join(sorted(set(vals)))
 
 
 def merge_lines(geometries):
@@ -73,35 +72,70 @@ def merge_lines(geometries):
     return linemerge(merged)
 
 
-def is_junction_supernode(node_id):
-    return str(node_id).startswith("JUNCTION_")
+def is_junction_node(node):
+    return str(node).startswith("JUNCTION_")
+
+
+def build_output_row(j2j_id, group, edge_type, start_junction_id, end_junction_id):
+    geometry = merge_lines(group.geometry)
+
+    if geometry is None or geometry.is_empty:
+        return None
+
+    row = {
+        "j2j_id": j2j_id,
+        "edge_type": edge_type,
+        "start_junction_id": start_junction_id,
+        "end_junction_id": end_junction_id,
+        "n_source_edges": len(group),
+        "source_edge_ids": unique_join(group["source_edge_id"]),
+        "length_m": group.geometry.length.sum(),
+        "geometry": geometry,
+    }
+
+    for col in [
+        "name",
+        "highway",
+        "oneway",
+        "maxspeed",
+        "lanes",
+        "sidewalk",
+        "sidewalk:left",
+        "sidewalk:right",
+        "cycleway",
+        "cycleway:left",
+        "cycleway:right",
+        "surface",
+        "lit",
+        "bridge",
+        "tunnel",
+    ]:
+        if col in group.columns:
+            row[f"{col}_values"] = unique_join(group[col])
+
+    row["has_sidewalk"] = (
+        any(str(v).lower() not in ["nan", "none", "no", ""] for v in group["sidewalk"])
+        if "sidewalk" in group.columns
+        else False
+    )
+
+    row["has_cycleway"] = (
+        any(str(v).lower() not in ["nan", "none", "no", ""] for v in group["cycleway"])
+        if "cycleway" in group.columns
+        else False
+    )
+
+    return row
 
 
 print("=" * 60)
 print("Creating Level 3A: J2J-Detailed Network")
 print("=" * 60)
 
-# ============================================================
-# 1. Load input data
-# ============================================================
-
-print("Loading Level 1 segment nodes...")
-nodes = gpd.read_file(
-    SEGMENT_GPKG,
-    layer=SEGMENT_NODES_LAYER,
-)
-
-print("Loading Level 2 relevant road edges...")
-edges = gpd.read_file(
-    INTERSECTION_GPKG,
-    layer=RELEVANT_EDGES_LAYER,
-)
-
-print("Loading Level 2 junction areas...")
-junctions = gpd.read_file(
-    INTERSECTION_GPKG,
-    layer=JUNCTION_AREAS_LAYER,
-)
+# Load inputs
+nodes = gpd.read_file(SEGMENT_GPKG, layer=SEGMENT_NODES_LAYER)
+edges = gpd.read_file(INTERSECTION_GPKG, layer=RELEVANT_EDGES_LAYER)
+junctions = gpd.read_file(INTERSECTION_GPKG, layer=JUNCTION_AREAS_LAYER)
 
 if nodes.crs != edges.crs:
     nodes = nodes.to_crs(edges.crs)
@@ -112,7 +146,7 @@ if junctions.crs != edges.crs:
 nodes["node_id_str"] = nodes["osmid"].astype(str)
 
 edges = edges.reset_index(drop=True)
-edges["local_edge_id"] = edges.index
+edges["source_edge_id"] = edges.index
 edges["u_str"] = edges["u"].astype(str)
 edges["v_str"] = edges["v"].astype(str)
 
@@ -120,12 +154,7 @@ print(f"Segment nodes: {len(nodes):,}")
 print(f"Relevant road edges: {len(edges):,}")
 print(f"Junction areas: {len(junctions):,}")
 
-# ============================================================
-# 2. Find which segment nodes are inside junction areas
-# ============================================================
-
-print("Assigning segment nodes to junction areas...")
-
+# Assign segment nodes to junction areas
 nodes_in_junctions = gpd.sjoin(
     nodes[["node_id_str", "geometry"]],
     junctions[["junction_id", "geometry"]],
@@ -144,215 +173,195 @@ node_to_junction = (
 
 print(f"Segment nodes inside junction areas: {len(node_to_junction):,}")
 
-# ============================================================
-# 3. Contract junction areas into supernodes
-# ============================================================
 
-def contracted_node(node_id):
+def contract_node(node_id):
     if node_id in node_to_junction:
         return f"JUNCTION_{node_to_junction[node_id]}"
     return node_id
 
 
-edges["cu"] = edges["u_str"].apply(contracted_node)
-edges["cv"] = edges["v_str"].apply(contracted_node)
+# Contract endpoints
+edges["cu"] = edges["u_str"].apply(contract_node)
+edges["cv"] = edges["v_str"].apply(contract_node)
 
-# Remove edges fully inside the same junction area
-between_edges = edges[edges["cu"] != edges["cv"]].copy()
+# Remove edges fully inside same junction
+internal_junction_edges = edges[edges["cu"] == edges["cv"]].copy()
+work_edges = edges[edges["cu"] != edges["cv"]].copy()
 
-print(f"Edges after removing internal junction edges: {len(between_edges):,}")
+print(f"Internal junction edges removed: {len(internal_junction_edges):,}")
+print(f"Edges used for Level 3A: {len(work_edges):,}")
 
-# ============================================================
-# 4. Build adjacency list
-# ============================================================
+# Split edge groups
+work_edges["cu_is_junction"] = work_edges["cu"].apply(is_junction_node)
+work_edges["cv_is_junction"] = work_edges["cv"].apply(is_junction_node)
 
-print("Building contracted adjacency list...")
+direct_junction_edges = work_edges[
+    work_edges["cu_is_junction"] & work_edges["cv_is_junction"]
+].copy()
 
-adjacency = defaultdict(list)
+nonjunction_edges = work_edges[
+    ~work_edges["cu_is_junction"] & ~work_edges["cv_is_junction"]
+].copy()
 
-for _, row in between_edges.iterrows():
-    edge_id = int(row["local_edge_id"])
-    u = row["cu"]
-    v = row["cv"]
+boundary_edges = work_edges[
+    work_edges["cu_is_junction"] ^ work_edges["cv_is_junction"]
+].copy()
 
-    adjacency[u].append((edge_id, v))
-    adjacency[v].append((edge_id, u))
+print(f"Direct junction-to-junction edges: {len(direct_junction_edges):,}")
+print(f"Non-junction edges: {len(nonjunction_edges):,}")
+print(f"Boundary edges: {len(boundary_edges):,}")
 
-junction_supernodes = {
-    node for node in adjacency
-    if is_junction_supernode(node)
-}
+# Build graph from non-junction edges
+G = nx.Graph()
 
-print(f"Contracted graph nodes: {len(adjacency):,}")
-print(f"Junction supernodes: {len(junction_supernodes):,}")
+for _, row in nonjunction_edges.iterrows():
+    G.add_edge(
+        row["cu"],
+        row["cv"],
+        source_edge_id=int(row["source_edge_id"]),
+    )
 
-# ============================================================
-# 5. Trace from junction area to next junction area / dead end
-# ============================================================
+components = list(nx.connected_components(G))
+print(f"Non-junction connected components: {len(components):,}")
 
-print("Tracing J2J-Detailed paths...")
-
+# Create outputs
 j2j_rows = []
 mapping_rows = []
 j2j_id = 1
 
-visited_start_edge_pairs = set()
+# Direct junction-to-junction edges
+if not direct_junction_edges.empty:
+    direct_junction_edges["junction_pair"] = direct_junction_edges.apply(
+        lambda r: "_".join(
+            sorted([
+                str(r["cu"]).replace("JUNCTION_", ""),
+                str(r["cv"]).replace("JUNCTION_", ""),
+            ])
+        ),
+        axis=1,
+    )
 
-for start_junction in junction_supernodes:
+    for _, group in direct_junction_edges.groupby("junction_pair"):
+        touched = sorted(
+            set(
+                int(str(v).replace("JUNCTION_", ""))
+                for v in list(group["cu"]) + list(group["cv"])
+            )
+        )
 
-    for first_edge_id, next_node in adjacency[start_junction]:
-
-        pair_key = (start_junction, first_edge_id)
-
-        if pair_key in visited_start_edge_pairs:
+        if len(touched) < 2:
             continue
 
-        visited_start_edge_pairs.add(pair_key)
+        start_junction_id = touched[0]
+        end_junction_id = touched[1]
 
-        stack = [
-            (
-                start_junction,
-                next_node,
-                start_junction,
-                [first_edge_id],
-                [start_junction, next_node],
+        row = build_output_row(
+            j2j_id,
+            group,
+            "junction_to_junction",
+            start_junction_id,
+            end_junction_id,
+        )
+
+        if row is None:
+            continue
+
+        j2j_rows.append(row)
+
+        for _, src in group.iterrows():
+            mapping_rows.append(
+                {
+                    "j2j_id": j2j_id,
+                    "source_edge_id": src["source_edge_id"],
+                    "edge_type": "junction_to_junction",
+                    "start_junction_id": start_junction_id,
+                    "end_junction_id": end_junction_id,
+                }
             )
-        ]
 
-        while stack:
+        j2j_id += 1
 
-            start_node, current_node, previous_node, path_edge_ids, path_nodes = stack.pop()
+# Components outside junctions + boundary edges
+for component_id, component_nodes in enumerate(components, start=1):
 
-            if (
-                is_junction_supernode(current_node)
-                and current_node != start_node
-            ):
-                end_node = current_node
-                end_type = "junction_to_junction"
+    component_internal_edges = nonjunction_edges[
+        nonjunction_edges["cu"].isin(component_nodes)
+        & nonjunction_edges["cv"].isin(component_nodes)
+    ].copy()
 
-            else:
-                next_options = [
-                    (eid, nbr)
-                    for eid, nbr in adjacency[current_node]
-                    if nbr != previous_node and eid not in path_edge_ids
-                ]
+    component_boundary_edges = boundary_edges[
+        boundary_edges["cu"].isin(component_nodes)
+        | boundary_edges["cv"].isin(component_nodes)
+    ].copy()
 
-                if len(next_options) == 0:
-                    end_node = current_node
-                    end_type = "junction_to_dead_end"
+    group = pd.concat(
+        [component_internal_edges, component_boundary_edges],
+        ignore_index=True,
+    )
 
-                elif len(next_options) == 1:
-                    next_edge_id, next_node = next_options[0]
+    if group.empty:
+        continue
 
-                    stack.append(
-                        (
-                            start_node,
-                            next_node,
-                            current_node,
-                            path_edge_ids + [next_edge_id],
-                            path_nodes + [next_node],
-                        )
-                    )
-                    continue
+    touched_junctions = []
 
-                else:
-                    # Branch: follow every possible continuation separately
-                    for next_edge_id, next_node in next_options:
-                        stack.append(
-                            (
-                                start_node,
-                                next_node,
-                                current_node,
-                                path_edge_ids + [next_edge_id],
-                                path_nodes + [next_node],
-                            )
-                        )
-                    continue
+    for _, r in component_boundary_edges.iterrows():
+        if is_junction_node(r["cu"]):
+            touched_junctions.append(int(str(r["cu"]).replace("JUNCTION_", "")))
+        if is_junction_node(r["cv"]):
+            touched_junctions.append(int(str(r["cv"]).replace("JUNCTION_", "")))
 
-            path_edges = between_edges[
-                between_edges["local_edge_id"].isin(path_edge_ids)
-            ].copy()
+    touched_junctions = sorted(set(touched_junctions))
 
-            geometry = merge_lines(path_edges.geometry)
+    if len(touched_junctions) >= 2:
+        edge_type = "junction_to_junction"
+        start_junction_id = touched_junctions[0]
+        end_junction_id = touched_junctions[1]
 
-            if geometry is None or geometry.is_empty:
-                continue
+        if len(touched_junctions) > 2:
+            edge_type = "multi_junction_component"
 
-            row = {
+    elif len(touched_junctions) == 1:
+        edge_type = "junction_to_dead_end"
+        start_junction_id = touched_junctions[0]
+        end_junction_id = None
+
+    else:
+        edge_type = "orphan_component"
+        start_junction_id = None
+        end_junction_id = None
+
+    row = build_output_row(
+        j2j_id,
+        group,
+        edge_type,
+        start_junction_id,
+        end_junction_id,
+    )
+
+    if row is None:
+        continue
+
+    row["component_id"] = component_id
+    row["n_touched_junctions"] = len(touched_junctions)
+    row["touched_junction_ids"] = unique_join(touched_junctions)
+
+    j2j_rows.append(row)
+
+    for _, src in group.iterrows():
+        mapping_rows.append(
+            {
                 "j2j_id": j2j_id,
-                "start_node": start_node,
-                "end_node": end_node,
-                "end_type": end_type,
-                "n_source_edges": len(path_edges),
-                "source_local_edge_ids": unique_join(path_edges["local_edge_id"]),
-                "source_segment_ids": unique_join(path_edges["segment_id"])
-                if "segment_id" in path_edges.columns else "",
-                "source_edge_ids": unique_join(path_edges["edge_id"])
-                if "edge_id" in path_edges.columns else "",
-                "path_nodes": ";".join(map(str, path_nodes)),
-                "length_m": path_edges.geometry.length.sum(),
-                "geometry": geometry,
+                "component_id": component_id,
+                "source_edge_id": src["source_edge_id"],
+                "edge_type": edge_type,
+                "start_junction_id": start_junction_id,
+                "end_junction_id": end_junction_id,
             }
+        )
 
-            for col in [
-                "name",
-                "highway",
-                "oneway",
-                "maxspeed",
-                "lanes",
-                "sidewalk",
-                "sidewalk:left",
-                "sidewalk:right",
-                "cycleway",
-                "cycleway:left",
-                "cycleway:right",
-                "surface",
-                "lit",
-                "bridge",
-                "tunnel",
-            ]:
-                if col in path_edges.columns:
-                    row[f"{col}_values"] = unique_join(path_edges[col])
+    j2j_id += 1
 
-            row["has_sidewalk"] = (
-                any(
-                    str(v).lower() not in ["nan", "none", "no", ""]
-                    for v in path_edges["sidewalk"]
-                )
-                if "sidewalk" in path_edges.columns
-                else False
-            )
-
-            row["has_cycleway"] = (
-                any(
-                    str(v).lower() not in ["nan", "none", "no", ""]
-                    for v in path_edges["cycleway"]
-                )
-                if "cycleway" in path_edges.columns
-                else False
-            )
-
-            j2j_rows.append(row)
-
-            for _, src in path_edges.iterrows():
-                mapping_rows.append(
-                    {
-                        "j2j_id": j2j_id,
-                        "source_local_edge_id": src["local_edge_id"],
-                        "segment_id": src["segment_id"] if "segment_id" in src else None,
-                        "edge_id": src["edge_id"] if "edge_id" in src else None,
-                        "start_node": start_node,
-                        "end_node": end_node,
-                        "end_type": end_type,
-                    }
-                )
-
-            j2j_id += 1
-
-# ============================================================
-# 6. Create outputs
-# ============================================================
-
+# Final layers
 j2j_edges = gpd.GeoDataFrame(
     j2j_rows,
     geometry="geometry",
@@ -361,72 +370,54 @@ j2j_edges = gpd.GeoDataFrame(
 
 mapping = pd.DataFrame(mapping_rows)
 
-print(f"Level 3A J2J-Detailed edges created: {len(j2j_edges):,}")
+valid_types = ["junction_to_junction", "junction_to_dead_end"]
+problem_types = ["multi_junction_component", "orphan_component"]
+
+clean_network = j2j_edges[
+    j2j_edges["edge_type"].isin(valid_types)
+].copy()
+
+problem_edges = j2j_edges[
+    j2j_edges["edge_type"].isin(problem_types)
+].copy()
+
+total_clean = len(clean_network)
+total_problem = len(problem_edges)
+total_output = total_clean + total_problem
+problem_share = total_problem / total_output * 100 if total_output > 0 else 0
+
+print("=" * 60)
+print("Level 3A quality summary")
+print("=" * 60)
+print(f"Clean network edges: {total_clean:,}")
+print(f"Problem edges: {total_problem:,}")
+print(f"Problem share: {problem_share:.2f}%")
 
 if not j2j_edges.empty:
-    print("\nEnd type summary:")
-    print(j2j_edges["end_type"].value_counts())
+    print("\nEdge type summary:")
+    print(j2j_edges["edge_type"].value_counts())
 
-# ============================================================
-# 7. Diagnostic: source edge usage
-# ============================================================
+# Save only two layers
+if OUTPUT_GPKG.exists():
+    print("Removing old output GeoPackage...")
+    OUTPUT_GPKG.unlink()
 
-if not mapping.empty:
-    edge_usage = (
-        mapping.groupby("source_local_edge_id")
-        .size()
-        .reset_index(name="n_j2j_edges_using_source")
-    )
-
-    repeated_source_edges = edge_usage[
-        edge_usage["n_j2j_edges_using_source"] > 1
-    ].copy()
-
-    print(
-        f"Source edges reused in multiple J2J paths: "
-        f"{len(repeated_source_edges):,}"
-    )
-else:
-    edge_usage = pd.DataFrame()
-    repeated_source_edges = pd.DataFrame()
-
-# ============================================================
-# 8. Save outputs
-# ============================================================
-
-print("Saving outputs...")
-
-j2j_edges.to_file(
+clean_network.to_file(
     OUTPUT_GPKG,
     layer="Level 3A: j2j_detailed_network",
     driver="GPKG",
 )
 
-mapping.to_csv(MAPPING_CSV, index=False)
-
-edge_usage.to_csv(
-    EDGE_USAGE_CSV,
-    index=False,
+problem_edges.to_file(
+    OUTPUT_GPKG,
+    layer="Level 3A: problem_edges",
+    driver="GPKG",
 )
 
-if not repeated_source_edges.empty:
-    repeated_edges_layer = between_edges.merge(
-        repeated_source_edges,
-        left_on="local_edge_id",
-        right_on="source_local_edge_id",
-        how="inner",
-    )
-
-    repeated_edges_layer.to_file(
-        OUTPUT_GPKG,
-        layer="Level 3A: repeated_source_edges",
-        driver="GPKG",
-    )
+mapping.to_csv(MAPPING_CSV, index=False)
 
 print("=" * 60)
 print("Done.")
-print(f"Saved J2J-Detailed network:")
+print(f"Saved:")
 print(f"  {OUTPUT_GPKG}")
-print(f"Saved mapping table:")
-print(f"  {MAPPING_CSV}")
 print("=" * 60)
