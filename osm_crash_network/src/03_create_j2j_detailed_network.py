@@ -2,8 +2,8 @@ from pathlib import Path
 
 import geopandas as gpd
 import pandas as pd
-import networkx as nx
-from shapely.ops import unary_union, linemerge
+import networkx as nx # creates graph components
+from shapely.ops import unary_union, linemerge # merge line geometries
 
 # ============================================================
 # 03_create_j2j_detailed_network.py
@@ -46,6 +46,7 @@ RELEVANT_EDGES_LAYER = "relevant_road_edges"
 JUNCTION_AREAS_LAYER = "junction_areas"
 
 
+# This collects unique values and joins them with ;. for fields like highway_values, maxspeed_values, sidewalk_values, cycleway_values
 def unique_join(values):
     vals = []
     for v in values:
@@ -54,7 +55,7 @@ def unique_join(values):
         vals.append(str(v))
     return ";".join(sorted(set(vals)))
 
-
+# It takes several small road geometries and turns them into one merged geometry.
 def merge_lines(geometries):
     geoms = [g for g in geometries if g is not None and not g.is_empty]
 
@@ -71,11 +72,11 @@ def merge_lines(geometries):
 
     return linemerge(merged)
 
-
+# This checks whether a node is a junction supernode according to a naming convention.
 def is_junction_node(node):
     return str(node).startswith("JUNCTION_")
 
-
+# This creates one output row for one merged Level 3A edge.
 def build_output_row(j2j_id, group, edge_type, start_junction_id, end_junction_id):
     geometry = merge_lines(group.geometry)
 
@@ -133,20 +134,20 @@ print("Creating Level 3A: J2J-Detailed Network")
 print("=" * 60)
 
 # Load inputs
-nodes = gpd.read_file(SEGMENT_GPKG, layer=SEGMENT_NODES_LAYER)
+nodes = gpd.read_file(SEGMENT_GPKG, layer=SEGMENT_NODES_LAYER) # The segment nodes are needed because the road edges have u and v node IDs, and we need their point locations.
 edges = gpd.read_file(INTERSECTION_GPKG, layer=RELEVANT_EDGES_LAYER)
 junctions = gpd.read_file(INTERSECTION_GPKG, layer=JUNCTION_AREAS_LAYER)
 
-if nodes.crs != edges.crs:
+if nodes.crs != edges.crs: # This ensures all layers use the same coordinate system because spatial joins only work correctly when CRS matches.
     nodes = nodes.to_crs(edges.crs)
 
-if junctions.crs != edges.crs:
+if junctions.crs != edges.crs: # This ensures all layers use the same coordinate system because spatial joins only work correctly when CRS matches.
     junctions = junctions.to_crs(edges.crs)
 
 nodes["node_id_str"] = nodes["osmid"].astype(str)
 
 edges = edges.reset_index(drop=True)
-edges["source_edge_id"] = edges.index
+edges["source_edge_id"] = edges.index # for each Level 2 relevant road edge.
 edges["u_str"] = edges["u"].astype(str)
 edges["v_str"] = edges["v"].astype(str)
 
@@ -161,7 +162,7 @@ nodes_in_junctions = gpd.sjoin(
     how="left",
     predicate="intersects",
 )
-
+# creates a dictionary
 node_to_junction = (
     nodes_in_junctions
     .dropna(subset=["junction_id"])
@@ -173,7 +174,7 @@ node_to_junction = (
 
 print(f"Segment nodes inside junction areas: {len(node_to_junction):,}")
 
-
+# If a node is inside a junction area, it becomes: JUNCTION_7
 def contract_node(node_id):
     if node_id in node_to_junction:
         return f"JUNCTION_{node_to_junction[node_id]}"
@@ -185,6 +186,7 @@ edges["cu"] = edges["u_str"].apply(contract_node)
 edges["cv"] = edges["v_str"].apply(contract_node)
 
 # Remove edges fully inside same junction
+# If both endpoints are inside the same junction area
 internal_junction_edges = edges[edges["cu"] == edges["cv"]].copy()
 work_edges = edges[edges["cu"] != edges["cv"]].copy()
 
@@ -195,14 +197,15 @@ print(f"Edges used for Level 3A: {len(work_edges):,}")
 work_edges["cu_is_junction"] = work_edges["cu"].apply(is_junction_node)
 work_edges["cv_is_junction"] = work_edges["cv"].apply(is_junction_node)
 
+# Edges directly between two junctions
 direct_junction_edges = work_edges[
     work_edges["cu_is_junction"] & work_edges["cv_is_junction"]
 ].copy()
-
+# Edges between ordinary road nodes:
 nonjunction_edges = work_edges[
     ~work_edges["cu_is_junction"] & ~work_edges["cv_is_junction"]
 ].copy()
-
+# Edges between a junction and an ordinary node:
 boundary_edges = work_edges[
     work_edges["cu_is_junction"] ^ work_edges["cv_is_junction"]
 ].copy()
@@ -211,18 +214,82 @@ print(f"Direct junction-to-junction edges: {len(direct_junction_edges):,}")
 print(f"Non-junction edges: {len(nonjunction_edges):,}")
 print(f"Boundary edges: {len(boundary_edges):,}")
 
-# Build graph from non-junction edges
+# ============================================================
+# DEBUG LAYER: classify every Level 2 relevant road edge
+# ============================================================
+
+debug_edges = edges.copy()
+
+debug_edges["script03_edge_class"] = "not_classified"
+
+debug_edges.loc[
+    debug_edges["source_edge_id"].isin(internal_junction_edges["source_edge_id"]),
+    "script03_edge_class"
+] = "internal_junction_edge_removed"
+
+debug_edges.loc[
+    debug_edges["source_edge_id"].isin(direct_junction_edges["source_edge_id"]),
+    "script03_edge_class"
+] = "direct_junction_to_junction"
+
+debug_edges.loc[
+    debug_edges["source_edge_id"].isin(boundary_edges["source_edge_id"]),
+    "script03_edge_class"
+] = "boundary_edge"
+
+debug_edges.loc[
+    debug_edges["source_edge_id"].isin(nonjunction_edges["source_edge_id"]),
+    "script03_edge_class"
+] = "nonjunction_edge"
+
+# ============================================================
+# Build components with boundary edges included,
+# but without allowing junctions to connect streets together
+# ============================================================
+# build components from both ordinary edges and boundary edges.
+component_graph_edges = pd.concat(
+    [nonjunction_edges, boundary_edges],
+    ignore_index=True,
+)
+
 G = nx.Graph()
 
-for _, row in nonjunction_edges.iterrows():
+for _, row in component_graph_edges.iterrows():
+
+    cu = row["cu"]
+    cv = row["cv"]
+
+    # If one endpoint is a junction supernode, do not use the
+    # junction node itself in the component graph.
+    # Instead, replace it with an edge-specific terminal node.
+    #
+    # This keeps the boundary edge in the component,
+    # but prevents different streets from connecting through JUNCTION_x.
+    # replaces the real junction node with a fake edge-specific terminal:
+    if is_junction_node(cu):
+        graph_u = f"TERMINAL_{int(row['source_edge_id'])}_U"
+        graph_v = cv
+
+    elif is_junction_node(cv):
+        graph_u = cu
+        graph_v = f"TERMINAL_{int(row['source_edge_id'])}_V"
+
+    else:
+        graph_u = cu
+        graph_v = cv
+
     G.add_edge(
-        row["cu"],
-        row["cv"],
+        graph_u,
+        graph_v,
         source_edge_id=int(row["source_edge_id"]),
     )
 
 components = list(nx.connected_components(G))
-print(f"Non-junction connected components: {len(components):,}")
+
+print(
+    f"Connected components with boundary edges included: "
+    f"{len(components):,}"
+)
 
 # Create outputs
 j2j_rows = []
@@ -282,26 +349,25 @@ if not direct_junction_edges.empty:
         j2j_id += 1
 
 # Components outside junctions + boundary edges
+# The script collects: 1. the internal ordinary edges, 2. the boundary edges connecting the component to junctions. Then it merges them.
 for component_id, component_nodes in enumerate(components, start=1):
 
-    component_internal_edges = nonjunction_edges[
-        nonjunction_edges["cu"].isin(component_nodes)
-        & nonjunction_edges["cv"].isin(component_nodes)
+    component_edge_ids = []
+
+    for u, v, data in G.subgraph(component_nodes).edges(data=True):
+        component_edge_ids.append(data["source_edge_id"])
+
+    group = work_edges[
+        work_edges["source_edge_id"].isin(component_edge_ids)
     ].copy()
 
     component_boundary_edges = boundary_edges[
-        boundary_edges["cu"].isin(component_nodes)
-        | boundary_edges["cv"].isin(component_nodes)
+        boundary_edges["source_edge_id"].isin(component_edge_ids)
     ].copy()
-
-    group = pd.concat(
-        [component_internal_edges, component_boundary_edges],
-        ignore_index=True,
-    )
 
     if group.empty:
         continue
-
+    # This finds which junction areas connect to the component.    
     touched_junctions = []
 
     for _, r in component_boundary_edges.iterrows():
@@ -329,7 +395,7 @@ for component_id, component_nodes in enumerate(components, start=1):
         edge_type = "orphan_component"
         start_junction_id = None
         end_junction_id = None
-
+    # This creates the final merged edge geometry and attributes.
     row = build_output_row(
         j2j_id,
         group,
@@ -346,7 +412,7 @@ for component_id, component_nodes in enumerate(components, start=1):
     row["touched_junction_ids"] = unique_join(touched_junctions)
 
     j2j_rows.append(row)
-
+    # records which Level 2 edge belongs to which Level 3A edge.
     for _, src in group.iterrows():
         mapping_rows.append(
             {
@@ -411,6 +477,12 @@ clean_network.to_file(
 problem_edges.to_file(
     OUTPUT_GPKG,
     layer="Level 3A: problem_edges",
+    driver="GPKG",
+)
+
+debug_edges.to_file(
+    OUTPUT_GPKG,
+    layer="Level 3A: debug_relevant_edge_classes",
     driver="GPKG",
 )
 
