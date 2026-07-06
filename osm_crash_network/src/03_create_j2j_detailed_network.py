@@ -46,14 +46,34 @@ RELEVANT_EDGES_LAYER = "relevant_road_edges"
 JUNCTION_AREAS_LAYER = "junction_areas"
 
 
+def normalize_osm_values(value):
+    if pd.isna(value):
+        return []
+
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+
+    value = str(value).strip()
+
+    value = (
+        value.replace("[", "")
+             .replace("]", "")
+             .replace("'", "")
+             .replace('"', "")
+    )
+
+    value = value.replace(";", ",")
+
+    return [v.strip() for v in value.split(",") if v.strip()]
+
 # This collects unique values and joins them with ;. for fields like highway_values, maxspeed_values, sidewalk_values, cycleway_values
 def unique_join(values):
-    vals = []
-    for v in values:
-        if pd.isna(v):
-            continue
-        vals.append(str(v))
-    return ";".join(sorted(set(vals)))
+    clean_values = []
+
+    for value in values:
+        clean_values.extend(normalize_osm_values(value))
+
+    return ";".join(sorted(set(clean_values)))
 
 # It takes several small road geometries and turns them into one merged geometry.
 def merge_lines(geometries):
@@ -71,6 +91,53 @@ def merge_lines(geometries):
         return merged
 
     return linemerge(merged)
+
+def to_numeric_clean(value):
+    try:
+        return float(str(value).replace(",", ".").strip())
+    except Exception:
+        return None
+
+
+def length_weighted_mean(values, lengths):
+    weighted_sum = 0
+    total_length = 0
+
+    for value, length in zip(values, lengths):
+        numeric_value = to_numeric_clean(value)
+
+        if numeric_value is None or pd.isna(length):
+            continue
+
+        weighted_sum += numeric_value * length
+        total_length += length
+
+    if total_length == 0:
+        return None
+
+    return weighted_sum / total_length
+
+def length_fraction_with_facility(values, lengths, positive_values):
+    facility_length = 0
+    total_length = 0
+
+    positive_values = {v.lower() for v in positive_values}
+
+    for value, length in zip(values, lengths):
+        if pd.isna(length):
+            continue
+
+        total_length += length
+
+        value_clean = str(value).lower().strip()
+
+        if value_clean in positive_values:
+            facility_length += length
+
+    if total_length == 0:
+        return None
+
+    return facility_length / total_length
 
 # This checks whether a node is a junction supernode according to a naming convention.
 def is_junction_node(node):
@@ -110,28 +177,234 @@ def build_output_row(j2j_id, group, edge_type, start_junction_id, end_junction_i
         "lit",
         "bridge",
         "tunnel",
+        "parking:lane",
+        "parking:lane:left",
+        "parking:lane:right",
+        "parking:lane:both",
+        "busway",
+        "busway:left",
+        "busway:right",
+        "turn:lanes",
+        "turn:lanes:forward",
+        "turn:lanes:backward",
     ]:
         if col in group.columns:
             row[f"{col}_values"] = unique_join(group[col])
 
+    # ------------------------------------------------------------
+    # Length-weighted average edge width
+    # ------------------------------------------------------------
+    if "edge_width" in group.columns:
+
+        numeric_widths = pd.to_numeric(
+            group["edge_width"],
+            errors="coerce",
+        )
+
+        row["edge_width_weighted_mean"] = length_weighted_mean(
+            numeric_widths,
+            group.geometry.length,
+        )
+
+        row["edge_width_min"] = numeric_widths.min()
+
+        row["edge_width_max"] = numeric_widths.max()
+
+    else:
+
+        row["edge_width_weighted_mean"] = None
+        row["edge_width_min"] = None
+        row["edge_width_max"] = None
+
+    # Length fraction with sidewalk
+    if "sidewalk" in group.columns:
+        row["sidewalk_length_fraction"] = length_fraction_with_facility(
+            group["sidewalk"],
+            group.geometry.length,
+            positive_values=["yes", "both", "left", "right", "separate"],
+        )
+    else:
+        row["sidewalk_length_fraction"] = None
+
+
+    # Length fraction with cycleway
+    cycleway_cols = [
+        col for col in ["cycleway", "cycleway:left", "cycleway:right"]
+        if col in group.columns
+    ]
+
+    if cycleway_cols:
+        cycleway_positive = ["yes", "lane", "track", "opposite", "opposite_lane", "opposite_track", "share_busway", "shared_lane", "separate"]
+
+        cycleway_any = group[cycleway_cols].apply(
+            lambda row_values: any(
+                str(v).lower().strip() in cycleway_positive
+                for v in row_values
+            ),
+            axis=1,
+        )
+
+        row["cycleway_length_fraction"] = (
+            group.geometry.length[cycleway_any].sum()
+            / group.geometry.length.sum()
+            if group.geometry.length.sum() > 0
+            else None
+        )
+    else:
+        row["cycleway_length_fraction"] = None
+
+
+    if "lit" in group.columns:
+        row["lit_length_fraction"] = length_fraction_with_facility(
+            group["lit"],
+            group.geometry.length,
+            positive_values=["yes", "automatic", "limited", "24/7"],
+        )
+    else:
+        row["lit_length_fraction"] = None
+
+    # ------------------------------------------------------------
+    # Length fraction on bridges
+    # ------------------------------------------------------------
+    if "bridge" in group.columns:
+        row["bridge_length_fraction"] = length_fraction_with_facility(
+            group["bridge"],
+            group.geometry.length,
+            positive_values=["yes", "viaduct", "movable", "aqueduct"],
+        )
+    else:
+        row["bridge_length_fraction"] = None
+
+    # ------------------------------------------------------------
+    # Length fraction in tunnels
+    # ------------------------------------------------------------
+    if "tunnel" in group.columns:
+        row["tunnel_length_fraction"] = length_fraction_with_facility(
+            group["tunnel"],
+            group.geometry.length,
+            positive_values=[
+                "yes",
+                "building_passage",
+                "culvert",
+                "avalanche_protector",
+            ],
+        )
+    else:
+        row["tunnel_length_fraction"] = None
+    # Add parking-lane fraction inside
+    parking_cols = [
+        col for col in [
+            "parking:lane",
+            "parking:lane:left",
+            "parking:lane:right",
+            "parking:lane:both",
+        ]
+        if col in group.columns
+    ]
+
+    if parking_cols:
+        parking_positive = [
+            "yes",
+            "parallel",
+            "diagonal",
+            "perpendicular",
+            "marked",
+        ]
+
+        parking_any = group[parking_cols].apply(
+            lambda row_values: any(
+                str(v).lower().strip() in parking_positive
+                for v in row_values
+            ),
+            axis=1,
+        )
+
+        row["parking_lane_length_fraction"] = (
+            group.geometry.length[parking_any].sum()
+            / group.geometry.length.sum()
+            if group.geometry.length.sum() > 0
+            else None
+        )
+    else:
+        row["parking_lane_length_fraction"] = None
+
+    # Add busway fraction
+    busway_cols = [
+        col for col in ["busway", "busway:left", "busway:right"]
+        if col in group.columns
+    ]
+
+    if busway_cols:
+        busway_positive = [
+            "lane",
+            "opposite_lane",
+            "designated",
+            "yes",
+        ]
+
+        busway_any = group[busway_cols].apply(
+            lambda row_values: any(
+                str(v).lower().strip() in busway_positive
+                for v in row_values
+            ),
+            axis=1,
+        )
+
+        row["busway_length_fraction"] = (
+            group.geometry.length[busway_any].sum()
+            / group.geometry.length.sum()
+            if group.geometry.length.sum() > 0
+            else None
+        )
+    else:
+        row["busway_length_fraction"] = None
+
+    # Add turn-lanes fraction
+    turn_lane_cols = [
+        col for col in [
+            "turn:lanes",
+            "turn:lanes:forward",
+            "turn:lanes:backward",
+        ]
+        if col in group.columns
+    ]
+
+    if turn_lane_cols:
+        turn_lanes_any = group[turn_lane_cols].apply(
+            lambda row_values: any(
+                str(v).lower().strip() not in ["", "nan", "none", "no"]
+                for v in row_values
+            ),
+            axis=1,
+        )
+
+        row["turn_lanes_length_fraction"] = (
+            group.geometry.length[turn_lanes_any].sum()
+            / group.geometry.length.sum()
+            if group.geometry.length.sum() > 0
+            else None
+        )
+    else:
+        row["turn_lanes_length_fraction"] = None
+
+
     row["has_sidewalk"] = (
-        any(str(v).lower() not in ["nan", "none", "no", ""] for v in group["sidewalk"])
-        if "sidewalk" in group.columns
-        else False
+        row["sidewalk_length_fraction"] is not None
+        and row["sidewalk_length_fraction"] > 0
     )
 
     row["has_cycleway"] = (
-        any(str(v).lower() not in ["nan", "none", "no", ""] for v in group["cycleway"])
-        if "cycleway" in group.columns
-        else False
+        row["cycleway_length_fraction"] is not None
+        and row["cycleway_length_fraction"] > 0
     )
 
     return row
 
-
 print("=" * 60)
 print("Creating Level 3A: J2J-Detailed Network")
 print("=" * 60)
+
+
 
 # Load inputs
 nodes = gpd.read_file(SEGMENT_GPKG, layer=SEGMENT_NODES_LAYER) # The segment nodes are needed because the road edges have u and v node IDs, and we need their point locations.
