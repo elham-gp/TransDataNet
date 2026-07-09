@@ -40,19 +40,22 @@ J2J_LAYER = "Level 3A: j2j_detailed_network"
 ACCESS_BUFFER_M = 8
 
 ACCESS_HIGHWAYS = {
-    "service",
+    "service", #These are typically: driveways, parking lot entrances, loading areas, gas stations, commercial accesses. They represent vehicular access points
     "footway",
     "path",
     "cycleway",
     "pedestrian",
     "living_street",
+    "steps",
+    "track",
 }
 
 ACCESS_TYPE_GROUPS = {
-    "service": {"service"},
-    "footway_path": {"footway", "path", "pedestrian"},
+    "service": {"service"}, #These are typically: driveways, parking lot entrances, loading areas, gas stations, commercial accesses. They represent vehicular access points
+    "footway_path": {"footway", "path", "pedestrian", "steps"}, #they all represent pedestrian access to the street.
     "cycleway": {"cycleway"},
-    "living_street": {"living_street"},
+    "living_street": {"living_street"}, # vehicles are allowed, these are a unique street environment with different operating characteristics.
+    "track": {"track"}, #A track usually represents: farm access, forest road, maintenance road, private access, access to parks, allotment gardens, industrial sites, or the urban fringe.
 }
 
 
@@ -186,57 +189,7 @@ for group_name, highway_values in ACCESS_TYPE_GROUPS.items():
         j2j[f"n_{group_name}_access_edges"] / (j2j["length_m"] / 1000)
     )
 
-# ------------------------------------------------------------
-# Access node count
-# ------------------------------------------------------------
-# This avoids over-counting long access ways split into many small edges.
-# It counts unique u/v nodes of access edges near each J2J edge.
 
-print("Counting buffered access nodes...")
-
-u_nodes = access_edges[["u", "geometry"]].copy()
-u_nodes["access_node_id"] = access_edges["u"].astype(str)
-u_nodes["geometry"] = access_edges.geometry.apply(lambda g: g.interpolate(0))
-
-v_nodes = access_edges[["v", "geometry"]].copy()
-v_nodes["access_node_id"] = access_edges["v"].astype(str)
-v_nodes["geometry"] = access_edges.geometry.apply(lambda g: g.interpolate(1, normalized=True))
-
-access_nodes = pd.concat(
-    [
-        u_nodes[["access_node_id", "geometry"]],
-        v_nodes[["access_node_id", "geometry"]],
-    ],
-    ignore_index=True,
-)
-
-access_nodes = gpd.GeoDataFrame(
-    access_nodes,
-    geometry="geometry",
-    crs=j2j.crs,
-).drop_duplicates(subset=["access_node_id"])
-
-node_join = gpd.sjoin(
-    access_nodes,
-    j2j_buffers[["j2j_id", "geometry"]],
-    how="inner",
-    predicate="intersects",
-)
-
-node_counts = (
-    node_join
-    .drop_duplicates(subset=["j2j_id", "access_node_id"])
-    .groupby("j2j_id")
-    .size()
-    .reset_index(name="n_access_nodes_buffered")
-)
-
-j2j = j2j.merge(node_counts, on="j2j_id", how="left")
-j2j["n_access_nodes_buffered"] = j2j["n_access_nodes_buffered"].fillna(0).astype(int)
-
-j2j["access_node_density_per_km"] = (
-    j2j["n_access_nodes_buffered"] / (j2j["length_m"] / 1000)
-)
 # ------------------------------------------------------------
 # Crossing count near each Level 3A edge
 # ------------------------------------------------------------
