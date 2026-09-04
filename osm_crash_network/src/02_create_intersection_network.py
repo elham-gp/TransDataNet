@@ -4,7 +4,7 @@ import geopandas as gpd
 import osmnx as ox
 
 # ============================================================
-# 03_create_intersection_network.py
+# 02_create_intersection_network.py
 #
 # Purpose:
 # Create stricter junction areas for crash analysis.

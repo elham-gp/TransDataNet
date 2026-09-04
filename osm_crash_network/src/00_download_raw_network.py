@@ -2,7 +2,7 @@ from pathlib import Path
 import osmnx as ox
 
 # ============================================================
-# 01_download_raw_network.py
+# 00_download_raw_network.py
 #
 # Purpose:
 # Download a raw OSM network for one city and save it outside

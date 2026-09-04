@@ -2,7 +2,7 @@ from pathlib import Path
 import osmnx as ox
 
 # ============================================================
-# 02_create_segment_network.py
+# 01_create_segment_network.py
 #
 # Purpose:
 # Load the raw OSM network created by script 01, simplify it

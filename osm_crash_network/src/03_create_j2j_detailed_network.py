@@ -447,7 +447,7 @@ node_to_junction = (
 
 print(f"Segment nodes inside junction areas: {len(node_to_junction):,}")
 
-# If a node is inside a junction area, it becomes: JUNCTION_7
+# If a node is inside a junction area, it becomes: JUNCTION_x
 def contract_node(node_id):
     if node_id in node_to_junction:
         return f"JUNCTION_{node_to_junction[node_id]}"
@@ -493,26 +493,26 @@ print(f"Boundary edges: {len(boundary_edges):,}")
 
 debug_edges = edges.copy()
 
-debug_edges["script03_edge_class"] = "not_classified"
+debug_edges["script02_edge_class"] = "not_classified"
 
 debug_edges.loc[
     debug_edges["source_edge_id"].isin(internal_junction_edges["source_edge_id"]),
-    "script03_edge_class"
+    "script02_edge_class"
 ] = "internal_junction_edge_removed"
 
 debug_edges.loc[
     debug_edges["source_edge_id"].isin(direct_junction_edges["source_edge_id"]),
-    "script03_edge_class"
+    "script02_edge_class"
 ] = "direct_junction_to_junction"
 
 debug_edges.loc[
     debug_edges["source_edge_id"].isin(boundary_edges["source_edge_id"]),
-    "script03_edge_class"
+    "script02_edge_class"
 ] = "boundary_edge"
 
 debug_edges.loc[
     debug_edges["source_edge_id"].isin(nonjunction_edges["source_edge_id"]),
-    "script03_edge_class"
+    "script02_edge_class"
 ] = "nonjunction_edge"
 
 # ============================================================
@@ -529,8 +529,8 @@ G = nx.Graph()
 
 for _, row in component_graph_edges.iterrows():
 
-    cu = row["cu"]
-    cv = row["cv"]
+    cu = row["cu"] # contracted endpoint IDs
+    cv = row["cv"] # contracted endpoint IDs
 
     # If one endpoint is a junction supernode, do not use the
     # junction node itself in the component graph.
@@ -539,6 +539,7 @@ for _, row in component_graph_edges.iterrows():
     # This keeps the boundary edge in the component,
     # but prevents different streets from connecting through JUNCTION_x.
     # replaces the real junction node with a fake edge-specific terminal:
+    # for example TERMINAL_91_U ───── 123456 instead of JUNCTION_91 ───── 123456 inside the component graph.
     if is_junction_node(cu):
         graph_u = f"TERMINAL_{int(row['source_edge_id'])}_U"
         graph_v = cv
@@ -550,14 +551,14 @@ for _, row in component_graph_edges.iterrows():
     else:
         graph_u = cu
         graph_v = cv
-
+# Add the modified edge to the graph. NetworkX now receives the edge.
     G.add_edge(
         graph_u,
         graph_v,
         source_edge_id=int(row["source_edge_id"]),
     )
 
-components = list(nx.connected_components(G))
+components = list(nx.connected_components(G)) # list of nodes, each corresponding to a level 2 edge.
 
 print(
     f"Connected components with boundary edges included: "
