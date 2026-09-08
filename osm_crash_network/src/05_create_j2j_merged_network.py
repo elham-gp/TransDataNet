@@ -48,8 +48,8 @@ DATA_ROOT = Path(
 MIN_LENGTH_RATIO_J2J = 0.65 # The shorter candidate edge must be at least 65% as long as the longer edge.
 MIN_LENGTH_RATIO_J2D = 0.45 
 
-MAX_MEAN_SEPARATION_M = 18 # The average distance between corresponding points on the two edges must be at most 18 m.
-MAX_POINT_SEPARATION_M = 32 # No corresponding sampled point should be farther than 32 m. This protects against cases where two lines are close for most of their length but diverge significantly at one end.
+MAX_MEAN_SEPARATION_M = 40 # The average distance between corresponding points on the two edges must be at most 18 m.
+MAX_POINT_SEPARATION_M = 50 # No corresponding sampled point should be farther than 32 m. This protects against cases where two lines are close for most of their length but diverge significantly at one end.
 
 MIN_PARALLEL_OVERLAP_FRACTION = 0.70 # At least 70% of both lines must run within the permitted distance of the other line.
 
