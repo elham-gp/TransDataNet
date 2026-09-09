@@ -3,7 +3,7 @@ from itertools import combinations # generates every possible pair of edges with
 import math
 
 import geopandas as gpd
-import networkx as nx
+#import networkx as nx
 import pandas as pd
 from shapely.geometry import LineString , MultiLineString # creates Level 4 centerlines. stores tested pairs in the diagnostics layer.
 from shapely.ops import linemerge # tries to convert multipart lines into a single line.
@@ -325,7 +325,7 @@ def line_pair_metrics(line_a, line_b):
     )
 
     max_separation = max(corresponding_distances)
-    # What proportion of each carriageway lies within 20 m of the other carriageway?
+    # What proportion of each carriageway lies within 45 m of the other carriageway?
     # For every sampled point on A, checks the distance to the nearest location anywhere on B. Then do the same for every sampled point on B. The minimum of the two proportions is used as the overlap fraction.
     close_a_to_b = sum(
         point.distance(line_b)
