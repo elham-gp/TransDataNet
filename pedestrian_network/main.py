@@ -227,7 +227,7 @@ for idx, line in tqdm(street_net_optimized_gdf.iterrows()):
 # caluculate overall results
 street_net_optimized_gdf["Bedeutung je km"] = round(
     (street_net_optimized_gdf["Summe AREA*Bedeutung"] + street_net_optimized_gdf['Summe POI*Bedeutung']) / street_net_optimized_gdf["laenge [km]"], 2)
-
+'''
 # =========================
 # Pedestrian Volume (PV)
 # =========================
@@ -235,6 +235,7 @@ street_net_optimized_gdf["Bedeutung je km"] = round(
 # These are the exact column names created earlier as "<Group>: Anzahl"
 col_x1 = "Dienstleistung, Einzelhandel, Gastronomie: Anzahl"
 col_x2 = "Hotels, Pensionen: Anzahl"
+col_x3 = ""
 
 # Make sure the columns exist (if a group never appears, it should still exist as 0 because you initialized headers)
 if col_x1 not in street_net_optimized_gdf.columns:
@@ -257,7 +258,7 @@ street_net_optimized_gdf['PV'] = np.exp(b0 + b1 * x1 + b2 * x2).fillna(0)
 
 # (optional) round for readability
 street_net_optimized_gdf['PV'] = street_net_optimized_gdf["PV"].round(0)
-
+'''
 
 # if population improvement applies:
 # New je-km metric that includes population-based Bedeutung; original stays as-is 
